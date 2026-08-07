@@ -1,0 +1,3 @@
+spring:
+  application:
+    name: msa4-lms-v2-payment
