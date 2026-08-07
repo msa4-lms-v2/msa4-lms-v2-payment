@@ -1,3 +1,48 @@
+server:
+  port: 8083
+
 spring:
   application:
     name: msa4-lms-v2-payment
+  threads:
+    virtual:
+      enabled: true
+
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:lms_payment}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  sql:
+    init:
+      mode: never
+
+security:
+  jwt:
+    secret: ${JWT_SECRET}
+
+academic:
+  service:
+    base-url: ${ACADEMIC_SERVICE_BASE_URL:http://localhost:8081}
+    token: ${ACADEMIC_SERVICE_TOKEN:}
+
+toss:
+  payments:
+    base-url: https://api.tosspayments.com
+    secret-key: ${TOSS_SECRET_KEY:}
+    client-key: ${TOSS_CLIENT_KEY:}
+    connect-timeout: 3000
+    read-timeout: 5000
+
+logging:
+  level:
+    com.msa4lmsv2payment: debug
