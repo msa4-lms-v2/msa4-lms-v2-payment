@@ -2,8 +2,8 @@ package com.msa4lmsv2payment.domain.payment.service;
 
 import com.msa4lmsv2payment.domain.payment.entity.Payment;
 import com.msa4lmsv2payment.domain.payment.entity.PaymentStatus;
-import com.msa4lmsv2payment.domain.payment.error.PaymentAmountMismatchException;
-import com.msa4lmsv2payment.domain.payment.error.PaymentNotFoundException;
+import com.msa4lmsv2payment.global.error.PaymentAmountMismatchException;
+import com.msa4lmsv2payment.global.error.PaymentNotFoundException;
 import com.msa4lmsv2payment.domain.payment.repository.PaymentRepository;
 import com.msa4lmsv2payment.domain.payment.request.CheckoutSessionRequestDTO;
 import com.msa4lmsv2payment.domain.payment.request.PaymentAmountValidationRequestDTO;

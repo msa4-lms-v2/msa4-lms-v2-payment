@@ -1,7 +1,7 @@
 package com.msa4lmsv2payment.domain.scholarship.service;
 
 import com.msa4lmsv2payment.domain.scholarship.entity.Scholarship;
-import com.msa4lmsv2payment.domain.scholarship.error.ScholarshipExceedsBillingAmountException;
+import com.msa4lmsv2payment.global.error.ScholarshipExceedsBillingAmountException;
 import com.msa4lmsv2payment.domain.scholarship.repository.ScholarshipRepository;
 import com.msa4lmsv2payment.domain.scholarship.request.PaymentScholarshipAllocationRequestDTO;
 import com.msa4lmsv2payment.domain.scholarship.request.ScholarshipDiscountRequestDTO;
