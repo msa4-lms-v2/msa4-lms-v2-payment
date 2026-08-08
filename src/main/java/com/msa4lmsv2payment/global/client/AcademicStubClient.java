@@ -4,10 +4,12 @@ import com.msa4lmsv2payment.global.error.AcademicResourceNotFoundException;
 import com.msa4lmsv2payment.global.error.NotStudentAccountException;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Set;
 
@@ -29,6 +31,13 @@ public class AcademicStubClient implements AcademicClient {
     // 7-3절 기준값(2026-2학기, 개강 9/1·종강 12/18)
     private static final LocalDate SEMESTER_START_DATE = LocalDate.of(2026, 9, 1);
     private static final LocalDate SEMESTER_END_DATE = LocalDate.of(2026, 12, 18);
+
+    /**
+     * 환불률 구간 4개(5/6, 2/3, 1/2, 0%)를 값만 바꿔 시연하기 위한 설정값 - MY-PLAN_payment.md 4-1절 스텁 스펙.
+     * 기본값(발표일 2026-09-18)은 7-3절 예시대로 5/6 구간에 해당한다.
+     */
+    @Value("${academic.stub.withdrawal-processed-at:2026-09-18T10:00:00}")
+    private LocalDateTime withdrawalProcessedAt;
 
     @PostConstruct
     public void warnStubActive() {
@@ -56,5 +65,13 @@ public class AcademicStubClient implements AcademicClient {
     @Override
     public AcademicSemesterResponse findSemester(Long semesterId) {
         return new AcademicSemesterResponse(semesterId, "SECOND", true, SEMESTER_START_DATE, SEMESTER_END_DATE);
+    }
+
+    @Override
+    public AcademicWithdrawalHistoryResponse findLatestWithdrawalHistory(Long studentId) {
+        if (!KNOWN_STUDENT_IDS.contains(studentId)) {
+            throw new AcademicResourceNotFoundException("자퇴 처리 이력을 찾을 수 없습니다: studentId=" + studentId);
+        }
+        return new AcademicWithdrawalHistoryResponse("ENROLLED", "ON_LEAVE", withdrawalProcessedAt);
     }
 }
