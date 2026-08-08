@@ -8,13 +8,17 @@ import com.msa4lmsv2payment.domain.payment.repository.PaymentRepository;
 import com.msa4lmsv2payment.domain.payment.request.CheckoutSessionRequestDTO;
 import com.msa4lmsv2payment.domain.payment.request.PaymentAmountValidationRequestDTO;
 import com.msa4lmsv2payment.domain.payment.request.PaymentResultSyncRequestDTO;
+import com.msa4lmsv2payment.domain.payment.request.PaymentStatusRequestDTO;
 import com.msa4lmsv2payment.domain.payment.request.PgPaymentRequestDTO;
 import com.msa4lmsv2payment.domain.payment.response.CheckoutSessionResponseDTO;
 import com.msa4lmsv2payment.domain.payment.response.PaymentAmountValidationResponseDTO;
 import com.msa4lmsv2payment.domain.payment.response.PaymentResponseDTO;
+import com.msa4lmsv2payment.domain.payment.response.PaymentSummaryResponseDTO;
 import com.msa4lmsv2payment.domain.scholarship.request.PaymentScholarshipAllocationRequestDTO;
+import com.msa4lmsv2payment.domain.scholarship.response.PaymentScholarshipAllocationResponseDTO;
 import com.msa4lmsv2payment.domain.scholarship.service.ScholarshipService;
 import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBill;
+import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBillStatus;
 import com.msa4lmsv2payment.domain.tuitionbill.service.TuitionBillService;
 import com.msa4lmsv2payment.global.audit.AuditAction;
 import com.msa4lmsv2payment.global.audit.AuditLogRecorder;
@@ -99,6 +103,37 @@ public class PaymentService {
         return PaymentResponseDTO.from(payment);
     }
 
+    // SCRUM-112: 납부 상태 반영(쓰기) - SUCCEEDED 결제 합계로 tuition_bills.status를 재계산한다.
+    // 소유권 검증이 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다(B3번).
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public void recalculateTuitionStatus(CurrentUser currentUser, PaymentStatusRequestDTO request) {
+        TuitionBill tuitionBill = tuitionBillService.getOwnedTuitionBillOrThrow(currentUser, request.tuitionBillId());
+        BigDecimal netDue = allocation(currentUser, tuitionBill.getId()).actualPaymentAmount();
+        BigDecimal totalPaid = paymentRepository.sumSucceededAmount(tuitionBill.getId());
+
+        TuitionBillStatus status;
+        if (totalPaid.compareTo(BigDecimal.ZERO) <= 0) {
+            status = TuitionBillStatus.UNPAID;
+        } else if (totalPaid.compareTo(netDue) >= 0) {
+            status = TuitionBillStatus.PAID;
+        } else {
+            status = TuitionBillStatus.PARTIAL;
+        }
+        tuitionBillService.changeStatus(tuitionBill.getId(), status);
+    }
+
+    // SCRUM-113: 납부 현황 반영(읽기)
+    public PaymentSummaryResponseDTO getPaymentSummary(CurrentUser currentUser, Long tuitionBillId) {
+        TuitionBill tuitionBill = tuitionBillService.getOwnedTuitionBillOrThrow(currentUser, tuitionBillId);
+        PaymentScholarshipAllocationResponseDTO allocation = allocation(currentUser, tuitionBillId);
+        BigDecimal totalPaid = paymentRepository.sumSucceededAmount(tuitionBillId);
+        BigDecimal remaining = allocation.actualPaymentAmount().subtract(totalPaid).max(BigDecimal.ZERO);
+
+        return new PaymentSummaryResponseDTO(
+                tuitionBillId, tuitionBill.getBillingAmount(), allocation.totalScholarshipAmount(),
+                totalPaid, remaining, tuitionBill.getStatus());
+    }
+
     private Payment findByOrderIdOrThrow(String orderId) {
         return paymentRepository.findById(parsePaymentId(orderId))
                 .orElseThrow(() -> new PaymentNotFoundException("결제 세션을 찾을 수 없습니다: " + orderId));
@@ -116,7 +151,10 @@ public class PaymentService {
     }
 
     private BigDecimal expectedAmount(CurrentUser currentUser, Long tuitionBillId) {
-        return scholarshipService.calculateAllocation(currentUser, new PaymentScholarshipAllocationRequestDTO(tuitionBillId))
-                .actualPaymentAmount();
+        return allocation(currentUser, tuitionBillId).actualPaymentAmount();
+    }
+
+    private PaymentScholarshipAllocationResponseDTO allocation(CurrentUser currentUser, Long tuitionBillId) {
+        return scholarshipService.calculateAllocation(currentUser, new PaymentScholarshipAllocationRequestDTO(tuitionBillId));
     }
 }
