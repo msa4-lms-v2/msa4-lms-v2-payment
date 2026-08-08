@@ -16,6 +16,7 @@ import com.msa4lmsv2payment.global.response.PageRes;
 import com.msa4lmsv2payment.global.security.CurrentUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -34,7 +35,9 @@ public class TuitionBillService {
     private final AuditLogRecorder auditLogRecorder;
 
     // SCRUM-43: 관리자 등록금 고지
-    @Transactional
+    // Academic 호출(academicClient) 동안 DB 커넥션을 붙잡지 않도록 트랜잭션 밖에서 실행한다(B3번).
+    // save()/record()는 각자 리포지토리·컴포넌트 자신의 트랜잭션으로 별도 커밋된다.
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public TuitionBillResponseDTO createTuitionBill(CurrentUser admin, TuitionBillCreateRequestDTO request) {
         academicClient.findStudent(request.studentId());
         academicClient.findSemester(request.semesterId());
