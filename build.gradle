@@ -47,8 +47,19 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
+def dotEnvProps() {
+    def envFile = file('.env')
+    def props = new Properties()
+    if (envFile.exists()) {
+        envFile.withInputStream { props.load(it) }
+    }
+    return props.collectEntries { key, value -> [(key): value] }
+}
+
 tasks.named('test') {
     useJUnitPlatform()
+    // code_convention.md B15번 - @SpringBootTest(contextLoads 등)가 DB 접속정보를 .env에서 읽도록 주입한다.
+    environment(dotEnvProps())
 }
 
 sourceSets {
@@ -61,10 +72,5 @@ sourceSets {
 
 // code_convention.md B15번 - 로컬 실행 시 .env(gitignore 대상)를 프로세스 환경변수로 주입한다.
 tasks.named('bootRun') {
-    def envFile = file('.env')
-    if (envFile.exists()) {
-        def envProps = new Properties()
-        envFile.withInputStream { envProps.load(it) }
-        environment(envProps.collectEntries { key, value -> [(key): value] })
-    }
+    environment(dotEnvProps())
 }
