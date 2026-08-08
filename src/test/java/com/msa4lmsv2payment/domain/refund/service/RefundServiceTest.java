@@ -4,9 +4,9 @@ import com.msa4lmsv2payment.domain.refund.WithdrawalRefundRateCalculator;
 import com.msa4lmsv2payment.domain.refund.entity.Refund;
 import com.msa4lmsv2payment.domain.refund.entity.RefundStatus;
 import com.msa4lmsv2payment.domain.refund.entity.RefundType;
-import com.msa4lmsv2payment.domain.refund.error.RefundNotFoundException;
-import com.msa4lmsv2payment.domain.refund.error.RefundNotRetryableException;
-import com.msa4lmsv2payment.domain.refund.error.RefundRetryLimitExceededException;
+import com.msa4lmsv2payment.global.error.RefundNotFoundException;
+import com.msa4lmsv2payment.global.error.RefundNotRetryableException;
+import com.msa4lmsv2payment.global.error.RefundRetryLimitExceededException;
 import com.msa4lmsv2payment.domain.refund.repository.RefundRepository;
 import com.msa4lmsv2payment.domain.refund.request.RefundRetryRequestDTO;
 import com.msa4lmsv2payment.domain.refund.request.VirtualAccountRefundRequestDTO;
@@ -61,13 +61,8 @@ class RefundServiceTest {
                     BigDecimal.ONE, new BigDecimal("0.8333"), new BigDecimal("0.6667"), new BigDecimal("0.5"), BigDecimal.ZERO));
 
     private static TuitionBill tuitionBill(Long id, BigDecimal billingAmount) {
-        TuitionBill bill = new TuitionBill();
+        TuitionBill bill = new TuitionBill(20260001L, 5L, billingAmount, LocalDate.of(2026, 9, 1), TuitionBillStatus.UNPAID, 1L);
         setField(bill, "id", id);
-        setField(bill, "studentId", 20260001L);
-        setField(bill, "semesterId", 5L);
-        setField(bill, "billingAmount", billingAmount);
-        setField(bill, "dueDate", LocalDate.of(2026, 9, 1));
-        setField(bill, "status", TuitionBillStatus.UNPAID);
         return bill;
     }
 
