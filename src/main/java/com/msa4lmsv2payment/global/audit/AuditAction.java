@@ -1,0 +1,14 @@
+package com.msa4lmsv2payment.global.audit;
+
+/**
+ * MY-PLAN_payment.md 7-6절 기록 대상 액션표.
+ */
+public enum AuditAction {
+    TUITION_BILL_CREATED,
+    REFUND_REQUESTED,
+    VIRTUAL_ACCOUNT_ISSUED,
+    PAYMENT_APPROVED,
+    PAYMENT_FAILED,
+    REFUND_RETRIED,
+    DOCUMENT_REVOKED
+}
