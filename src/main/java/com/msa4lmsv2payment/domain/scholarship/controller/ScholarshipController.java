@@ -7,6 +7,11 @@ import com.msa4lmsv2payment.domain.scholarship.response.ScholarshipResponseDTO;
 import com.msa4lmsv2payment.domain.scholarship.service.ScholarshipService;
 import com.msa4lmsv2payment.global.response.GlobalRes;
 import com.msa4lmsv2payment.global.security.CurrentUser;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -17,12 +22,21 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+@Tag(name = "Payment", description = "장학금 감면·실납부액 계산")
+@SecurityRequirement(name = "bearerAuth")
 @RestController
 @RequiredArgsConstructor
 public class ScholarshipController {
 
     private final ScholarshipService scholarshipService;
 
+    @Operation(summary = "장학금 감면·면제 적용", description = "ADMIN이 등록금 고지에 장학금을 적용한다. 고지 금액을 초과하는 감면은 거부된다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "적용 성공"),
+            @ApiResponse(responseCode = "403", description = "ADMIN 아님"),
+            @ApiResponse(responseCode = "404", description = "존재하지 않는 고지"),
+            @ApiResponse(responseCode = "400", description = "장학금 합계가 고지 금액 초과")
+    })
     @PreAuthorize("hasRole('ADMIN')")
     @ResponseStatus(HttpStatus.CREATED)
     @PostMapping("/api/payments/scholarship-discounts")
@@ -33,6 +47,12 @@ public class ScholarshipController {
         return GlobalRes.success(scholarshipService.applyScholarshipDiscount(currentUser, request));
     }
 
+    @Operation(summary = "실제 납부액과 장학금 구분", description = "고지 금액에서 적용된 장학금 합계를 뺀 실납부액을 계산한다. STUDENT 본인 / ADMIN 관리 범위.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "계산 성공"),
+            @ApiResponse(responseCode = "403", description = "본인 고지가 아님"),
+            @ApiResponse(responseCode = "404", description = "존재하지 않는 고지")
+    })
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
     @PostMapping("/api/payments/payment-scholarship-allocation")
     public GlobalRes<PaymentScholarshipAllocationResponseDTO> getPaymentScholarshipAllocation(
