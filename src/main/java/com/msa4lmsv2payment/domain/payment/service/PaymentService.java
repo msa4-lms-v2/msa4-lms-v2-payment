@@ -98,7 +98,7 @@ public class PaymentService {
             payment.fail();
             paymentRepository.save(payment);
             auditLogRecorder.record(actorId, AuditAction.PAYMENT_FAILED, "PAYMENT", payment.getId(),
-                    Map.of("tossStatus", tossResponse.status()), null);
+                    Map.of("tossStatus", tossResponse.status() == null ? "UNKNOWN" : tossResponse.status()), null);
         }
         return PaymentResponseDTO.from(payment);
     }
