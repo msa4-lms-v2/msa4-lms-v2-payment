@@ -1,4 +1,4 @@
-package com.msa4lmsv2payment.domain.refund.entity;
+package com.msa4lmsv2payment.domain.payment.entity;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
@@ -18,70 +18,52 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "refunds")
+@Table(name = "payments")
 @Getter
 @EqualsAndHashCode(of = "id")
 @NoArgsConstructor
 @EntityListeners(AuditingEntityListener.class)
-public class Refund {
+public class Payment {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private Long paymentId;
-
-    private Long virtualAccountId;
-
     private Long tuitionBillId;
 
-    @Enumerated(EnumType.STRING)
-    private RefundType refundType;
+    private Long studentId;
 
     private BigDecimal amount;
 
-    private BigDecimal refundRate;
+    @Enumerated(EnumType.STRING)
+    private PaymentMethod method;
+
+    private String pgTransactionId;
 
     @Enumerated(EnumType.STRING)
-    private RefundStatus status;
+    private PaymentStatus status;
 
     @CreatedDate
     private LocalDateTime requestedAt;
 
     private LocalDateTime completedAt;
 
-    private Integer retryCount = 0;
-
-    public Refund(Long tuitionBillId, RefundType refundType, BigDecimal amount, BigDecimal refundRate, RefundStatus status) {
+    public Payment(Long tuitionBillId, Long studentId, BigDecimal amount, PaymentMethod method, PaymentStatus status) {
         this.tuitionBillId = tuitionBillId;
-        this.refundType = refundType;
+        this.studentId = studentId;
         this.amount = amount;
-        this.refundRate = refundRate;
+        this.method = method;
         this.status = status;
     }
 
-    public void updateRate(BigDecimal amount, BigDecimal refundRate) {
-        this.amount = amount;
-        this.refundRate = refundRate;
-    }
-
-    public void linkVirtualAccount(Long virtualAccountId) {
-        this.virtualAccountId = virtualAccountId;
-    }
-
-    public void succeed() {
-        this.status = RefundStatus.SUCCEEDED;
+    public void succeed(String pgTransactionId) {
+        this.pgTransactionId = pgTransactionId;
+        this.status = PaymentStatus.SUCCEEDED;
         this.completedAt = LocalDateTime.now();
     }
 
     public void fail() {
-        this.status = RefundStatus.FAILED;
+        this.status = PaymentStatus.FAILED;
         this.completedAt = LocalDateTime.now();
-    }
-
-    public void retry() {
-        this.retryCount = this.retryCount + 1;
-        this.status = RefundStatus.RETRYING;
-        this.completedAt = null;
     }
 }

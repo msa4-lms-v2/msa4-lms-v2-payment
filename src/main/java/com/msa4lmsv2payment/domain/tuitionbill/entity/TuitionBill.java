@@ -59,4 +59,8 @@ public class TuitionBill {
         this.status = status;
         this.createdBy = createdBy;
     }
+
+    public void changeStatus(TuitionBillStatus status) {
+        this.status = status;
+    }
 }

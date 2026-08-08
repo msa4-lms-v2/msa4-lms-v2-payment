@@ -1,0 +1,167 @@
+package com.msa4lmsv2payment.domain.payment.service;
+
+import com.msa4lmsv2payment.domain.payment.entity.Payment;
+import com.msa4lmsv2payment.domain.payment.entity.PaymentStatus;
+import com.msa4lmsv2payment.domain.payment.error.PaymentAmountMismatchException;
+import com.msa4lmsv2payment.domain.payment.error.PaymentNotFoundException;
+import com.msa4lmsv2payment.domain.payment.repository.PaymentRepository;
+import com.msa4lmsv2payment.domain.payment.request.CheckoutSessionRequestDTO;
+import com.msa4lmsv2payment.domain.payment.request.PaymentAmountValidationRequestDTO;
+import com.msa4lmsv2payment.domain.payment.request.PaymentResultSyncRequestDTO;
+import com.msa4lmsv2payment.domain.payment.request.PaymentStatusRequestDTO;
+import com.msa4lmsv2payment.domain.payment.request.PgPaymentRequestDTO;
+import com.msa4lmsv2payment.domain.payment.response.CheckoutSessionResponseDTO;
+import com.msa4lmsv2payment.domain.payment.response.PaymentAmountValidationResponseDTO;
+import com.msa4lmsv2payment.domain.payment.response.PaymentResponseDTO;
+import com.msa4lmsv2payment.domain.payment.response.PaymentSummaryResponseDTO;
+import com.msa4lmsv2payment.domain.scholarship.request.PaymentScholarshipAllocationRequestDTO;
+import com.msa4lmsv2payment.domain.scholarship.response.PaymentScholarshipAllocationResponseDTO;
+import com.msa4lmsv2payment.domain.scholarship.service.ScholarshipService;
+import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBill;
+import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBillStatus;
+import com.msa4lmsv2payment.domain.tuitionbill.service.TuitionBillService;
+import com.msa4lmsv2payment.global.audit.AuditAction;
+import com.msa4lmsv2payment.global.audit.AuditLogRecorder;
+import com.msa4lmsv2payment.global.client.TossPaymentResponse;
+import com.msa4lmsv2payment.global.client.TossPaymentsClient;
+import com.msa4lmsv2payment.global.security.CurrentUser;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.util.Map;
+
+@Service
+@RequiredArgsConstructor
+@Transactional(readOnly = true)
+public class PaymentService {
+
+    private static final String ORDER_ID_PREFIX = "PAY-";
+
+    private final PaymentRepository paymentRepository;
+    private final TuitionBillService tuitionBillService;
+    private final ScholarshipService scholarshipService;
+    private final TossPaymentsClient tossPaymentsClient;
+    private final AuditLogRecorder auditLogRecorder;
+
+    // SCRUM-51: 결제 금액 검증
+    public PaymentAmountValidationResponseDTO validateAmount(CurrentUser currentUser, PaymentAmountValidationRequestDTO request) {
+        BigDecimal expected = expectedAmount(currentUser, request.tuitionBillId());
+        boolean valid = expected.compareTo(request.amount()) == 0;
+        return new PaymentAmountValidationResponseDTO(valid, expected);
+    }
+
+    // SCRUM-111: 결제창 연동 - payments 행을 REQUESTED로 미리 만들고 체크아웃 데이터를 돌려준다.
+    // 소유권 검증(getOwnedTuitionBillOrThrow)이 STUDENT 호출 시 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다(B3번).
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public CheckoutSessionResponseDTO createCheckoutSession(CurrentUser currentUser, CheckoutSessionRequestDTO request) {
+        TuitionBill tuitionBill = tuitionBillService.getOwnedTuitionBillOrThrow(currentUser, request.tuitionBillId());
+        BigDecimal amount = expectedAmount(currentUser, request.tuitionBillId());
+
+        Payment payment = paymentRepository.save(new Payment(
+                tuitionBill.getId(), tuitionBill.getStudentId(), amount, request.method(), PaymentStatus.REQUESTED));
+
+        return new CheckoutSessionResponseDTO(payment.getId(), ORDER_ID_PREFIX + payment.getId(), "등록금 납부", amount);
+    }
+
+    // SCRUM-115: PG 결제 요청 - 51을 내부 재사용해 위조 금액을 거른 뒤 토스 confirm을 호출하고, 결과를 그 자리에서 저장한다(110 역할 포함).
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public PaymentResponseDTO requestPgPayment(CurrentUser currentUser, PgPaymentRequestDTO request) {
+        Payment payment = findByOrderIdOrThrow(request.orderId());
+        tuitionBillService.getOwnedTuitionBillOrThrow(currentUser, payment.getTuitionBillId());
+
+        if (payment.getAmount().compareTo(request.amount()) != 0) {
+            throw new PaymentAmountMismatchException("결제 금액이 일치하지 않습니다.");
+        }
+
+        TossPaymentResponse tossResponse = tossPaymentsClient.confirmPayment(request.paymentKey(), request.orderId(), request.amount());
+        return applyPaymentResult(currentUser.id(), payment, tossResponse);
+    }
+
+    // SCRUM-110: 결제 성공·실패 처리 - confirm 호출이 타임아웃됐을 때 ADMIN이 토스 실제 상태로 DB를 동기화하는 복구용.
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public PaymentResponseDTO syncPaymentResult(CurrentUser admin, PaymentResultSyncRequestDTO request) {
+        Payment payment = findByOrderIdOrThrow(request.orderId());
+        TossPaymentResponse tossResponse = tossPaymentsClient.getPayment(request.paymentKey());
+        return applyPaymentResult(admin.id(), payment, tossResponse);
+    }
+
+    private PaymentResponseDTO applyPaymentResult(Long actorId, Payment payment, TossPaymentResponse tossResponse) {
+        if (tossResponse.isDone()) {
+            payment.succeed(tossResponse.paymentKey());
+            paymentRepository.save(payment);
+            auditLogRecorder.record(actorId, AuditAction.PAYMENT_APPROVED, "PAYMENT", payment.getId(),
+                    Map.of("tuitionBillId", payment.getTuitionBillId(), "amount", payment.getAmount()), null);
+        } else {
+            payment.fail();
+            paymentRepository.save(payment);
+            auditLogRecorder.record(actorId, AuditAction.PAYMENT_FAILED, "PAYMENT", payment.getId(),
+                    Map.of("tossStatus", tossResponse.status()), null);
+        }
+        return PaymentResponseDTO.from(payment);
+    }
+
+    // SCRUM-112: 납부 상태 반영(쓰기) - SUCCEEDED 결제 합계로 tuition_bills.status를 재계산한다.
+    // 소유권 검증이 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다(B3번).
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public void recalculateTuitionStatus(CurrentUser currentUser, PaymentStatusRequestDTO request) {
+        TuitionBill tuitionBill = tuitionBillService.getOwnedTuitionBillOrThrow(currentUser, request.tuitionBillId());
+        BigDecimal netDue = allocation(currentUser, tuitionBill.getId()).actualPaymentAmount();
+        BigDecimal totalPaid = paymentRepository.sumSucceededAmount(tuitionBill.getId());
+
+        TuitionBillStatus status;
+        if (totalPaid.compareTo(BigDecimal.ZERO) <= 0) {
+            status = TuitionBillStatus.UNPAID;
+        } else if (totalPaid.compareTo(netDue) >= 0) {
+            status = TuitionBillStatus.PAID;
+        } else {
+            status = TuitionBillStatus.PARTIAL;
+        }
+        tuitionBillService.changeStatus(tuitionBill.getId(), status);
+    }
+
+    /**
+     * SCRUM-114 - 다른 도메인(document 등)이 납부 완료 여부를 확인해야 할 때 이 공개 메서드를 거친다(B1번 패키지 경계).
+     */
+    public boolean hasSucceededPayment(Long tuitionBillId) {
+        return !paymentRepository.findByTuitionBillIdAndStatus(tuitionBillId, PaymentStatus.SUCCEEDED).isEmpty();
+    }
+
+    // SCRUM-113: 납부 현황 반영(읽기)
+    public PaymentSummaryResponseDTO getPaymentSummary(CurrentUser currentUser, Long tuitionBillId) {
+        TuitionBill tuitionBill = tuitionBillService.getOwnedTuitionBillOrThrow(currentUser, tuitionBillId);
+        PaymentScholarshipAllocationResponseDTO allocation = allocation(currentUser, tuitionBillId);
+        BigDecimal totalPaid = paymentRepository.sumSucceededAmount(tuitionBillId);
+        BigDecimal remaining = allocation.actualPaymentAmount().subtract(totalPaid).max(BigDecimal.ZERO);
+
+        return new PaymentSummaryResponseDTO(
+                tuitionBillId, tuitionBill.getBillingAmount(), allocation.totalScholarshipAmount(),
+                totalPaid, remaining, tuitionBill.getStatus());
+    }
+
+    private Payment findByOrderIdOrThrow(String orderId) {
+        return paymentRepository.findById(parsePaymentId(orderId))
+                .orElseThrow(() -> new PaymentNotFoundException("결제 세션을 찾을 수 없습니다: " + orderId));
+    }
+
+    private Long parsePaymentId(String orderId) {
+        if (orderId == null || !orderId.startsWith(ORDER_ID_PREFIX)) {
+            throw new PaymentNotFoundException("잘못된 orderId 형식입니다: " + orderId);
+        }
+        try {
+            return Long.valueOf(orderId.substring(ORDER_ID_PREFIX.length()));
+        } catch (NumberFormatException e) {
+            throw new PaymentNotFoundException("잘못된 orderId 형식입니다: " + orderId);
+        }
+    }
+
+    private BigDecimal expectedAmount(CurrentUser currentUser, Long tuitionBillId) {
+        return allocation(currentUser, tuitionBillId).actualPaymentAmount();
+    }
+
+    private PaymentScholarshipAllocationResponseDTO allocation(CurrentUser currentUser, Long tuitionBillId) {
+        return scholarshipService.calculateAllocation(currentUser, new PaymentScholarshipAllocationRequestDTO(tuitionBillId));
+    }
+}
