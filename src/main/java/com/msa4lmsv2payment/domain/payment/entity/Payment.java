@@ -1,4 +1,4 @@
-package com.msa4lmsv2payment.domain.tuitionbill.entity;
+package com.msa4lmsv2payment.domain.payment.entity;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
@@ -12,55 +12,58 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.CreatedDate;
-import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "tuition_bills")
+@Table(name = "payments")
 @Getter
 @EqualsAndHashCode(of = "id")
 @NoArgsConstructor
 @EntityListeners(AuditingEntityListener.class)
-public class TuitionBill {
+public class Payment {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    private Long tuitionBillId;
+
     private Long studentId;
 
-    private Long semesterId;
-
-    private BigDecimal billingAmount;
-
-    private LocalDate dueDate;
+    private BigDecimal amount;
 
     @Enumerated(EnumType.STRING)
-    private TuitionBillStatus status;
+    private PaymentMethod method;
 
-    private Long createdBy;
+    private String pgTransactionId;
+
+    @Enumerated(EnumType.STRING)
+    private PaymentStatus status;
 
     @CreatedDate
-    private LocalDateTime createdAt;
+    private LocalDateTime requestedAt;
 
-    @LastModifiedDate
-    private LocalDateTime updatedAt;
+    private LocalDateTime completedAt;
 
-    public TuitionBill(Long studentId, Long semesterId, BigDecimal billingAmount, LocalDate dueDate,
-                        TuitionBillStatus status, Long createdBy) {
+    public Payment(Long tuitionBillId, Long studentId, BigDecimal amount, PaymentMethod method, PaymentStatus status) {
+        this.tuitionBillId = tuitionBillId;
         this.studentId = studentId;
-        this.semesterId = semesterId;
-        this.billingAmount = billingAmount;
-        this.dueDate = dueDate;
+        this.amount = amount;
+        this.method = method;
         this.status = status;
-        this.createdBy = createdBy;
     }
 
-    public void changeStatus(TuitionBillStatus status) {
-        this.status = status;
+    public void succeed(String pgTransactionId) {
+        this.pgTransactionId = pgTransactionId;
+        this.status = PaymentStatus.SUCCEEDED;
+        this.completedAt = LocalDateTime.now();
+    }
+
+    public void fail() {
+        this.status = PaymentStatus.FAILED;
+        this.completedAt = LocalDateTime.now();
     }
 }
