@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -43,6 +44,14 @@ public class GlobalExceptionHandler {
         log.warn("[{}] {}", CustomResponseCode.INVALID_PARAMETER.getCode(), e.getMessage());
         return ResponseEntity.status(CustomResponseCode.INVALID_PARAMETER.getHttpStatus())
                 .body(GlobalRes.fail(CustomResponseCode.INVALID_PARAMETER, e.getMessage(), null));
+    }
+
+    @ExceptionHandler(MissingRequestHeaderException.class)
+    public ResponseEntity<GlobalRes<Void>> handleMissingRequestHeaderException(MissingRequestHeaderException e) {
+        String message = "필수 헤더가 누락되었습니다: " + e.getHeaderName();
+        log.warn("[{}] {}", CustomResponseCode.INVALID_PARAMETER.getCode(), message);
+        return ResponseEntity.status(CustomResponseCode.INVALID_PARAMETER.getHttpStatus())
+                .body(GlobalRes.fail(CustomResponseCode.INVALID_PARAMETER, message, null));
     }
 
     // @PreAuthorize 거부(AuthorizationDeniedException)는 컨트롤러 메서드 내부(AOP)에서 던져져

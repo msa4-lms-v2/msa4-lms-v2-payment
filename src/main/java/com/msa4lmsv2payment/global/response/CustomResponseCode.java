@@ -13,6 +13,7 @@ public enum CustomResponseCode {
     INVALID_TOKEN("E04", HttpStatus.UNAUTHORIZED),
 
     NOT_FOUND_DATA("E10", HttpStatus.NOT_FOUND),
+    DUPLICATE_DATA("E11", HttpStatus.CONFLICT),
 
     INVALID_PARAMETER("E21", HttpStatus.BAD_REQUEST),
 
