@@ -4,7 +4,7 @@ import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBill;
 import com.msa4lmsv2payment.domain.tuitionbill.service.TuitionBillService;
 import com.msa4lmsv2payment.domain.virtualaccount.entity.VirtualAccount;
 import com.msa4lmsv2payment.domain.virtualaccount.entity.VirtualAccountStatus;
-import com.msa4lmsv2payment.domain.virtualaccount.error.VirtualAccountNotFoundException;
+import com.msa4lmsv2payment.global.error.VirtualAccountNotFoundException;
 import com.msa4lmsv2payment.domain.virtualaccount.repository.VirtualAccountRepository;
 import com.msa4lmsv2payment.domain.virtualaccount.request.VirtualAccountIssueRequestDTO;
 import com.msa4lmsv2payment.domain.virtualaccount.response.VirtualAccountResponseDTO;

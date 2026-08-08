@@ -1,6 +1,5 @@
-package com.msa4lmsv2payment.domain.scholarship.error;
+package com.msa4lmsv2payment.global.error;
 
-import com.msa4lmsv2payment.global.error.BusinessException;
 import com.msa4lmsv2payment.global.response.CustomResponseCode;
 
 public class ScholarshipExceedsBillingAmountException extends BusinessException {
