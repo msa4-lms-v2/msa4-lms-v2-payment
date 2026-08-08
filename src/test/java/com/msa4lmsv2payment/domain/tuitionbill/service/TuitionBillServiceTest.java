@@ -6,9 +6,13 @@ import com.msa4lmsv2payment.domain.tuitionbill.error.TuitionBillAccessDeniedExce
 import com.msa4lmsv2payment.domain.tuitionbill.error.TuitionBillNotFoundException;
 import com.msa4lmsv2payment.domain.tuitionbill.repository.TuitionBillQueryRepository;
 import com.msa4lmsv2payment.domain.tuitionbill.repository.TuitionBillRepository;
+import com.msa4lmsv2payment.domain.tuitionbill.request.TuitionBillCreateRequestDTO;
 import com.msa4lmsv2payment.domain.tuitionbill.response.TuitionBillResponseDTO;
+import com.msa4lmsv2payment.global.audit.AuditLogRecorder;
 import com.msa4lmsv2payment.global.client.AcademicClient;
+import com.msa4lmsv2payment.global.client.AcademicStudentExistsResponse;
 import com.msa4lmsv2payment.global.client.AcademicStudentResponse;
+import com.msa4lmsv2payment.global.error.AcademicResourceNotFoundException;
 import com.msa4lmsv2payment.global.response.PageRes;
 import com.msa4lmsv2payment.global.security.CurrentUser;
 import org.junit.jupiter.api.Test;
@@ -38,6 +42,8 @@ class TuitionBillServiceTest {
     private TuitionBillQueryRepository tuitionBillQueryRepository;
     @Mock
     private AcademicClient academicClient;
+    @Mock
+    private AuditLogRecorder auditLogRecorder;
 
     @InjectMocks
     private TuitionBillService tuitionBillService;
@@ -130,5 +136,43 @@ class TuitionBillServiceTest {
 
         assertThatThrownBy(() -> tuitionBillService.getTuitionBillOrThrow(999L))
                 .isInstanceOf(TuitionBillNotFoundException.class);
+    }
+
+    // SCRUM-43: 관리자 등록금 고지
+    @Test
+    void 등록금_고지_생성은_학생과_학기_존재를_Academic에_확인한다() {
+        CurrentUser admin = new CurrentUser(1L, "ADMIN");
+        when(academicClient.findStudent(20260001L)).thenReturn(new AcademicStudentExistsResponse(20260001L, "ENROLLED"));
+
+        var request = new TuitionBillCreateRequestDTO(20260001L, 5L, BigDecimal.valueOf(4_500_000), LocalDate.of(2026, 9, 15));
+        var result = tuitionBillService.createTuitionBill(admin, request);
+
+        assertThat(result.studentId()).isEqualTo(20260001L);
+        assertThat(result.status()).isEqualTo(TuitionBillStatus.UNPAID);
+    }
+
+    @Test
+    void 존재하지_않는_학생으로_등록금_고지를_생성하면_거부된다() {
+        CurrentUser admin = new CurrentUser(1L, "ADMIN");
+        when(academicClient.findStudent(999999L))
+                .thenThrow(new AcademicResourceNotFoundException("존재하지 않는 학번입니다: 999999"));
+
+        var request = new TuitionBillCreateRequestDTO(999999L, 5L, BigDecimal.valueOf(4_500_000), LocalDate.of(2026, 9, 15));
+
+        assertThatThrownBy(() -> tuitionBillService.createTuitionBill(admin, request))
+                .isInstanceOf(AcademicResourceNotFoundException.class);
+    }
+
+    // SCRUM-77: 학생 등록금 고지서 조회
+    @Test
+    void 학생은_본인_고지서를_단건_조회할_수_있다() {
+        CurrentUser student = new CurrentUser(1L, "STUDENT");
+        when(tuitionBillRepository.findById(5L))
+                .thenReturn(Optional.of(tuitionBill(5L, 20260001L, BigDecimal.valueOf(4_500_000), TuitionBillStatus.UNPAID)));
+        when(academicClient.findStudentByUserId(1L)).thenReturn(new AcademicStudentResponse(20260001L, 1L, "ENROLLED"));
+
+        var result = tuitionBillService.getStudentTuitionBill(student, 5L);
+
+        assertThat(result.id()).isEqualTo(5L);
     }
 }

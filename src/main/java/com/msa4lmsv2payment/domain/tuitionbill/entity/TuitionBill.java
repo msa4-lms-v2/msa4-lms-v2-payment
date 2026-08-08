@@ -49,4 +49,14 @@ public class TuitionBill {
 
     @LastModifiedDate
     private LocalDateTime updatedAt;
+
+    public TuitionBill(Long studentId, Long semesterId, BigDecimal billingAmount, LocalDate dueDate,
+                        TuitionBillStatus status, Long createdBy) {
+        this.studentId = studentId;
+        this.semesterId = semesterId;
+        this.billingAmount = billingAmount;
+        this.dueDate = dueDate;
+        this.status = status;
+        this.createdBy = createdBy;
+    }
 }
