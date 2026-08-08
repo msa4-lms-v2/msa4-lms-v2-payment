@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 @Slf4j
@@ -37,31 +38,41 @@ public class AcademicHttpClient implements AcademicClient {
 
     @Override
     public AcademicStudentResponse findStudentByUserId(Long userId) {
-        return get("/internal/academic/students/by-user/{userId}", userId,
+        return get(spec -> spec.uri("/internal/academic/students/by-user/{userId}", userId),
                 new ParameterizedTypeReference<InternalApiResponse<AcademicStudentResponse>>() {},
                 () -> new NotStudentAccountException("학생 계정이 아니거나 존재하지 않는 사용자입니다."));
     }
 
     @Override
     public AcademicStudentExistsResponse findStudent(Long studentId) {
-        return get("/internal/academic/students/{studentId}", studentId,
+        return get(spec -> spec.uri("/internal/academic/students/{studentId}", studentId),
                 new ParameterizedTypeReference<InternalApiResponse<AcademicStudentExistsResponse>>() {},
                 () -> new AcademicResourceNotFoundException("존재하지 않는 학번입니다: " + studentId));
     }
 
     @Override
     public AcademicSemesterResponse findSemester(Long semesterId) {
-        return get("/internal/academic/semesters/{semesterId}", semesterId,
+        return get(spec -> spec.uri("/internal/academic/semesters/{semesterId}", semesterId),
                 new ParameterizedTypeReference<InternalApiResponse<AcademicSemesterResponse>>() {},
                 () -> new AcademicResourceNotFoundException("존재하지 않는 학기입니다: " + semesterId));
     }
 
-    private <T> T get(String uriTemplate, Object uriVariable, ParameterizedTypeReference<InternalApiResponse<T>> typeRef,
+    @Override
+    public AcademicWithdrawalHistoryResponse findLatestWithdrawalHistory(Long studentId) {
+        return get(spec -> spec.uri(uriBuilder -> uriBuilder
+                        .path("/internal/academic/students/{studentId}/status-histories/latest")
+                        .queryParam("requestType", "WITHDRAWAL")
+                        .build(studentId)),
+                new ParameterizedTypeReference<InternalApiResponse<AcademicWithdrawalHistoryResponse>>() {},
+                () -> new AcademicResourceNotFoundException("자퇴 처리 이력을 찾을 수 없습니다: studentId=" + studentId));
+    }
+
+    private <T> T get(Function<RestClient.RequestHeadersUriSpec<?>, RestClient.RequestHeadersSpec<?>> uriCustomizer,
+                       ParameterizedTypeReference<InternalApiResponse<T>> typeRef,
                        Supplier<RuntimeException> notFoundExceptionSupplier) {
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
-                InternalApiResponse<T> response = restClient.get()
-                        .uri(uriTemplate, uriVariable)
+                InternalApiResponse<T> response = uriCustomizer.apply(restClient.get())
                         .retrieve()
                         .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
                             if (res.getStatusCode().value() == 404) {
