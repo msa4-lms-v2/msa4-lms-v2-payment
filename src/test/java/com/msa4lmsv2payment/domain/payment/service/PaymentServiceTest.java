@@ -9,6 +9,7 @@ import com.msa4lmsv2payment.domain.payment.repository.PaymentRepository;
 import com.msa4lmsv2payment.domain.payment.request.CheckoutSessionRequestDTO;
 import com.msa4lmsv2payment.domain.payment.request.PaymentAmountValidationRequestDTO;
 import com.msa4lmsv2payment.domain.payment.request.PaymentResultSyncRequestDTO;
+import com.msa4lmsv2payment.domain.payment.request.PaymentStatusRequestDTO;
 import com.msa4lmsv2payment.domain.payment.request.PgPaymentRequestDTO;
 import com.msa4lmsv2payment.domain.scholarship.response.PaymentScholarshipAllocationResponseDTO;
 import com.msa4lmsv2payment.domain.scholarship.service.ScholarshipService;
@@ -190,5 +191,51 @@ class PaymentServiceTest {
         var result = paymentService.syncPaymentResult(admin, new PaymentResultSyncRequestDTO("PAY-7", "pk_test"));
 
         assertThat(result.status()).isEqualTo(PaymentStatus.SUCCEEDED);
+    }
+
+    // SCRUM-112: 납부 상태 반영
+    @Test
+    void 완납이면_PAID로_바뀐다() {
+        CurrentUser admin = new CurrentUser(1L, "ADMIN");
+        TuitionBill bill = tuitionBill(1L, BigDecimal.valueOf(4_200_000));
+        when(tuitionBillService.getOwnedTuitionBillOrThrow(admin, 1L)).thenReturn(bill);
+        when(scholarshipService.calculateAllocation(eq(admin), any()))
+                .thenReturn(new PaymentScholarshipAllocationResponseDTO(1L, BigDecimal.valueOf(4_200_000), BigDecimal.ZERO, BigDecimal.valueOf(4_200_000)));
+        when(paymentRepository.sumSucceededAmount(1L)).thenReturn(BigDecimal.valueOf(4_200_000));
+
+        paymentService.recalculateTuitionStatus(admin, new PaymentStatusRequestDTO(1L));
+
+        org.mockito.Mockito.verify(tuitionBillService).changeStatus(1L, TuitionBillStatus.PAID);
+    }
+
+    @Test
+    void 일부만_냈으면_PARTIAL로_바뀐다() {
+        CurrentUser admin = new CurrentUser(1L, "ADMIN");
+        TuitionBill bill = tuitionBill(1L, BigDecimal.valueOf(4_200_000));
+        when(tuitionBillService.getOwnedTuitionBillOrThrow(admin, 1L)).thenReturn(bill);
+        when(scholarshipService.calculateAllocation(eq(admin), any()))
+                .thenReturn(new PaymentScholarshipAllocationResponseDTO(1L, BigDecimal.valueOf(4_200_000), BigDecimal.ZERO, BigDecimal.valueOf(4_200_000)));
+        when(paymentRepository.sumSucceededAmount(1L)).thenReturn(BigDecimal.valueOf(1_000_000));
+
+        paymentService.recalculateTuitionStatus(admin, new PaymentStatusRequestDTO(1L));
+
+        org.mockito.Mockito.verify(tuitionBillService).changeStatus(1L, TuitionBillStatus.PARTIAL);
+    }
+
+    // SCRUM-113: 납부 현황 반영
+    @Test
+    void 납부현황은_장학금_차감후_잔액을_계산한다() {
+        CurrentUser student = new CurrentUser(1L, "STUDENT");
+        TuitionBill bill = tuitionBill(1L, BigDecimal.valueOf(4_200_000));
+        when(tuitionBillService.getOwnedTuitionBillOrThrow(student, 1L)).thenReturn(bill);
+        when(scholarshipService.calculateAllocation(eq(student), any()))
+                .thenReturn(new PaymentScholarshipAllocationResponseDTO(1L, BigDecimal.valueOf(4_200_000), BigDecimal.valueOf(2_000_000), BigDecimal.valueOf(2_200_000)));
+        when(paymentRepository.sumSucceededAmount(1L)).thenReturn(BigDecimal.valueOf(1_200_000));
+
+        var result = paymentService.getPaymentSummary(student, 1L);
+
+        assertThat(result.totalScholarshipAmount()).isEqualByComparingTo(BigDecimal.valueOf(2_000_000));
+        assertThat(result.totalPaidAmount()).isEqualByComparingTo(BigDecimal.valueOf(1_200_000));
+        assertThat(result.remainingAmount()).isEqualByComparingTo(BigDecimal.valueOf(1_000_000));
     }
 }

@@ -3,10 +3,12 @@ package com.msa4lmsv2payment.domain.payment.controller;
 import com.msa4lmsv2payment.domain.payment.request.CheckoutSessionRequestDTO;
 import com.msa4lmsv2payment.domain.payment.request.PaymentAmountValidationRequestDTO;
 import com.msa4lmsv2payment.domain.payment.request.PaymentResultSyncRequestDTO;
+import com.msa4lmsv2payment.domain.payment.request.PaymentStatusRequestDTO;
 import com.msa4lmsv2payment.domain.payment.request.PgPaymentRequestDTO;
 import com.msa4lmsv2payment.domain.payment.response.CheckoutSessionResponseDTO;
 import com.msa4lmsv2payment.domain.payment.response.PaymentAmountValidationResponseDTO;
 import com.msa4lmsv2payment.domain.payment.response.PaymentResponseDTO;
+import com.msa4lmsv2payment.domain.payment.response.PaymentSummaryResponseDTO;
 import com.msa4lmsv2payment.domain.payment.service.PaymentService;
 import com.msa4lmsv2payment.global.idempotency.IdempotencyService;
 import com.msa4lmsv2payment.global.response.GlobalRes;
@@ -16,10 +18,12 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -72,5 +76,24 @@ public class PaymentController {
             @RequestBody @Valid PaymentResultSyncRequestDTO request
     ) {
         return GlobalRes.success(paymentService.syncPaymentResult(admin, request));
+    }
+
+    @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
+    @PatchMapping("/api/payments/payment-status")
+    public GlobalRes<Void> recalculateTuitionStatus(
+            @AuthenticationPrincipal CurrentUser currentUser,
+            @RequestBody @Valid PaymentStatusRequestDTO request
+    ) {
+        paymentService.recalculateTuitionStatus(currentUser, request);
+        return GlobalRes.success();
+    }
+
+    @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
+    @GetMapping("/api/payments/payment-summary")
+    public GlobalRes<PaymentSummaryResponseDTO> getPaymentSummary(
+            @AuthenticationPrincipal CurrentUser currentUser,
+            @RequestParam Long tuitionBillId
+    ) {
+        return GlobalRes.success(paymentService.getPaymentSummary(currentUser, tuitionBillId));
     }
 }
