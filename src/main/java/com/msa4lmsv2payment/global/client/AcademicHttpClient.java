@@ -39,7 +39,12 @@ public class AcademicHttpClient implements AcademicClient {
                         .uri("/internal/academic/students/by-user/{userId}", userId)
                         .retrieve()
                         .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
-                            throw new NotStudentAccountException("학생 계정이 아니거나 존재하지 않는 사용자입니다.");
+                            if (res.getStatusCode().value() == 404) {
+                                throw new NotStudentAccountException("학생 계정이 아니거나 존재하지 않는 사용자입니다.");
+                            }
+                            // 401/403은 서비스 토큰 문제 - "학생 아님"과 원인이 다르므로 구분해서 로그에 드러나게 한다.
+                            throw new AcademicServiceUnavailableException(
+                                    "Academic 내부 API 인증에 실패했습니다(상태 " + res.getStatusCode().value() + ") - 서비스 토큰을 확인하세요.");
                         })
                         .body(new ParameterizedTypeReference<InternalApiResponse<AcademicStudentResponse>>() {});
 
