@@ -43,6 +43,15 @@ toss:
     connect-timeout: 3000
     read-timeout: 5000
 
+payment:
+  refund:
+    withdrawal:
+      rate-before-start: 1.0
+      rate-under-one-third: 0.8333
+      rate-under-half: 0.6667
+      rate-under-two-thirds: 0.5
+      rate-after-two-thirds: 0.0
+
 logging:
   level:
     com.msa4lmsv2payment: debug

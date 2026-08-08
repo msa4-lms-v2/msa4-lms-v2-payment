@@ -1,12 +1,13 @@
 package com.msa4lmsv2payment;
 
 import com.msa4lmsv2payment.global.config.TossPaymentsProperties;
+import com.msa4lmsv2payment.global.config.WithdrawalRefundRateProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 @SpringBootApplication
-@EnableConfigurationProperties(TossPaymentsProperties.class)
+@EnableConfigurationProperties({TossPaymentsProperties.class, WithdrawalRefundRateProperties.class})
 public class Msa4LmsV2PaymentApplication {
 
     public static void main(String[] args) {
