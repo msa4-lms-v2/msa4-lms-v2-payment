@@ -4,9 +4,9 @@ import com.msa4lmsv2payment.domain.refund.WithdrawalRefundRateCalculator;
 import com.msa4lmsv2payment.domain.refund.entity.Refund;
 import com.msa4lmsv2payment.domain.refund.entity.RefundStatus;
 import com.msa4lmsv2payment.domain.refund.entity.RefundType;
-import com.msa4lmsv2payment.domain.refund.error.RefundNotFoundException;
-import com.msa4lmsv2payment.domain.refund.error.RefundNotRetryableException;
-import com.msa4lmsv2payment.domain.refund.error.RefundRetryLimitExceededException;
+import com.msa4lmsv2payment.global.error.RefundNotFoundException;
+import com.msa4lmsv2payment.global.error.RefundNotRetryableException;
+import com.msa4lmsv2payment.global.error.RefundRetryLimitExceededException;
 import com.msa4lmsv2payment.domain.refund.repository.RefundRepository;
 import com.msa4lmsv2payment.domain.refund.request.RefundRetryRequestDTO;
 import com.msa4lmsv2payment.domain.refund.request.VirtualAccountRefundRequestDTO;
@@ -46,6 +46,9 @@ public class RefundService {
     private final AuditLogRecorder auditLogRecorder;
 
     // SCRUM-63: 자퇴 예상 환불금 조회 (조회만, 저장 없음)
+    // resolveWithdrawalRefundRate가 Academic을 호출해 트랜잭션 밖에서 실행한다(B3번) - applyWithdrawalRefundRate(166)와
+    // 같은 private 헬퍼를 쓰면서도 이 조회 경로만 놓쳤던 걸 뒤늦게 발견해 맞췄다.
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public WithdrawalRefundEstimateResponseDTO estimateWithdrawalRefund(CurrentUser currentUser, Long tuitionBillId) {
         TuitionBill tuitionBill = tuitionBillService.getOwnedTuitionBillOrThrow(currentUser, tuitionBillId);
         BigDecimal rate = resolveWithdrawalRefundRate(tuitionBill);

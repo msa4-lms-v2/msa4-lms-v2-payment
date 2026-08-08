@@ -2,7 +2,7 @@ package com.msa4lmsv2payment.domain.document.service;
 
 import com.msa4lmsv2payment.domain.document.entity.Document;
 import com.msa4lmsv2payment.domain.document.entity.DocumentType;
-import com.msa4lmsv2payment.domain.document.error.PaymentNotCompletedException;
+import com.msa4lmsv2payment.global.error.PaymentNotCompletedException;
 import com.msa4lmsv2payment.domain.document.repository.DocumentRepository;
 import com.msa4lmsv2payment.domain.document.request.PaymentReceiptRequestDTO;
 import com.msa4lmsv2payment.domain.document.response.DocumentResponseDTO;

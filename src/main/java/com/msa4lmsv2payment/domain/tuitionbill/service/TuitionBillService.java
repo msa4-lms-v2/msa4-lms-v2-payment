@@ -2,8 +2,8 @@ package com.msa4lmsv2payment.domain.tuitionbill.service;
 
 import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBill;
 import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBillStatus;
-import com.msa4lmsv2payment.domain.tuitionbill.error.TuitionBillAccessDeniedException;
-import com.msa4lmsv2payment.domain.tuitionbill.error.TuitionBillNotFoundException;
+import com.msa4lmsv2payment.global.error.TuitionBillAccessDeniedException;
+import com.msa4lmsv2payment.global.error.TuitionBillNotFoundException;
 import com.msa4lmsv2payment.domain.tuitionbill.repository.TuitionBillQueryRepository;
 import com.msa4lmsv2payment.domain.tuitionbill.repository.TuitionBillRepository;
 import com.msa4lmsv2payment.domain.tuitionbill.request.TuitionBillCreateRequestDTO;
@@ -59,6 +59,8 @@ public class TuitionBillService {
     }
 
     // SCRUM-77: 학생 등록금 고지서 조회 (43이 만든 고지 단건을 학생이 확인)
+    // getOwnedTuitionBillOrThrow가 STUDENT 호출 시 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다(B3번).
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public TuitionBillResponseDTO getStudentTuitionBill(CurrentUser student, Long tuitionBillId) {
         return TuitionBillResponseDTO.from(getOwnedTuitionBillOrThrow(student, tuitionBillId));
     }
@@ -77,6 +79,8 @@ public class TuitionBillService {
         return new PageRes<>(items, totalCount, safePage, clampedSize, hasNext);
     }
 
+    // resolveStudentId가 Academic을 호출해 트랜잭션 밖에서 실행한다(B3번).
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public List<TuitionBillResponseDTO> getMyTuitionBills(CurrentUser currentUser) {
         Long studentId = resolveStudentId(currentUser);
         return tuitionBillRepository.findByStudentIdOrderByDueDateDesc(studentId).stream()
@@ -84,6 +88,8 @@ public class TuitionBillService {
                 .toList();
     }
 
+    // getOwnedTuitionBillOrThrow가 STUDENT 호출 시 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다(B3번).
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public TuitionPaymentStatusResponseDTO getTuitionPaymentStatus(CurrentUser currentUser, Long tuitionBillId) {
         TuitionBill tuitionBill = getOwnedTuitionBillOrThrow(currentUser, tuitionBillId);
         return TuitionPaymentStatusResponseDTO.from(tuitionBill);
@@ -92,7 +98,10 @@ public class TuitionBillService {
     /**
      * ADMIN은 전체 고지에, STUDENT는 본인 고지에만 접근 가능하도록 검증한 뒤 엔티티를 반환한다.
      * 다른 도메인(scholarship 등)이 tuition_bill 소유권을 확인해야 할 때도 이 메서드를 거친다(B1번 패키지 경계).
+     * STUDENT 호출 시 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다(B3번) - 다른 서비스가 빈 경계를 넘어(프록시를 거쳐)
+     * 이 메서드를 직접 호출할 때는 호출부 자신의 propagation 설정과 무관하게 이 메서드 자신의 propagation이 적용된다.
      */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public TuitionBill getOwnedTuitionBillOrThrow(CurrentUser currentUser, Long tuitionBillId) {
         TuitionBill tuitionBill = getTuitionBillOrThrow(tuitionBillId);
 
