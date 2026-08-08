@@ -50,6 +50,8 @@ public class Refund {
 
     private LocalDateTime completedAt;
 
+    private Integer retryCount = 0;
+
     public Refund(Long tuitionBillId, RefundType refundType, BigDecimal amount, BigDecimal refundRate, RefundStatus status) {
         this.tuitionBillId = tuitionBillId;
         this.refundType = refundType;
@@ -75,5 +77,11 @@ public class Refund {
     public void fail() {
         this.status = RefundStatus.FAILED;
         this.completedAt = LocalDateTime.now();
+    }
+
+    public void retry() {
+        this.retryCount = this.retryCount + 1;
+        this.status = RefundStatus.RETRYING;
+        this.completedAt = null;
     }
 }
