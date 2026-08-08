@@ -1,5 +1,6 @@
 package com.msa4lmsv2payment.domain.refund.controller;
 
+import com.msa4lmsv2payment.domain.refund.request.RefundRetryRequestDTO;
 import com.msa4lmsv2payment.domain.refund.request.VirtualAccountRefundRequestDTO;
 import com.msa4lmsv2payment.domain.refund.request.WithdrawalRefundRateRequestDTO;
 import com.msa4lmsv2payment.domain.refund.response.RefundResponseDTO;
@@ -27,6 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class RefundController {
 
     private static final String ENDPOINT_VIRTUAL_ACCOUNT_REQUESTS = "/api/refunds/virtual-account-requests";
+    private static final String ENDPOINT_RETRY = "/api/refunds/retry";
 
     private final RefundService refundService;
     private final IdempotencyService idempotencyService;
@@ -61,6 +63,19 @@ public class RefundController {
     ) {
         idempotencyService.verifyAndReserve(idempotencyKey, currentUser.id(), ENDPOINT_VIRTUAL_ACCOUNT_REQUESTS, request);
         RefundResponseDTO response = refundService.requestVirtualAccountRefund(currentUser, request);
+        idempotencyService.markCompleted(idempotencyKey);
+        return GlobalRes.success(response);
+    }
+
+    @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
+    @PostMapping(ENDPOINT_RETRY)
+    public GlobalRes<RefundResponseDTO> retryFailedRefund(
+            @AuthenticationPrincipal CurrentUser currentUser,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @RequestBody @Valid RefundRetryRequestDTO request
+    ) {
+        idempotencyService.verifyAndReserve(idempotencyKey, currentUser.id(), ENDPOINT_RETRY, request);
+        RefundResponseDTO response = refundService.retryFailedRefund(currentUser, request);
         idempotencyService.markCompleted(idempotencyKey);
         return GlobalRes.success(response);
     }

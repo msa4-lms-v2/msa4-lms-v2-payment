@@ -92,3 +92,46 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_audit_logs_target (target_type, target_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 2026-08-08: week-3 착수분 (payments, documents) 추가 — MY-PLAN_payment.md 10절
+-- documents.document_type에 PAYMENT_CERTIFICATE(납부 확인서)를 포함한다(7-8절, docs-v2/MSA-LMS_ERD.md 5-3절 갱신).
+
+CREATE TABLE IF NOT EXISTS payments (
+    id                 BIGINT AUTO_INCREMENT PRIMARY KEY,
+    tuition_bill_id    BIGINT NOT NULL,
+    student_id         BIGINT NOT NULL COMMENT 'Academic.students.id 참조, FK 아님',
+    amount             DECIMAL(12, 0) NOT NULL,
+    method             VARCHAR(20) NOT NULL COMMENT 'CARD, VIRTUAL_ACCOUNT, TRANSFER',
+    pg_transaction_id  VARCHAR(100) COMMENT '토스 paymentKey - confirm 성공 후 채워짐',
+    status             VARCHAR(20) NOT NULL COMMENT 'REQUESTED, SUCCEEDED, FAILED, CANCELLED',
+    requested_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    completed_at       DATETIME,
+    UNIQUE KEY uk_payments_pg_transaction_id (pg_transaction_id),
+    INDEX idx_payments_tuition_bill_id (tuition_bill_id),
+    CONSTRAINT fk_payments_tuition_bill FOREIGN KEY (tuition_bill_id) REFERENCES tuition_bills (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- refunds.payment_id는 week-2 시점엔 payments가 없어 FK 없이 컬럼만 있었다. 이제 생겼으니 FK를 추가한다(B20번 - 기존 CREATE TABLE 문은 손대지 않고 ALTER로만 반영).
+ALTER TABLE refunds
+    ADD CONSTRAINT fk_refunds_payment FOREIGN KEY (payment_id) REFERENCES payments (id);
+
+CREATE TABLE IF NOT EXISTS documents (
+    id                  BIGINT AUTO_INCREMENT PRIMARY KEY,
+    student_id          BIGINT COMMENT 'Academic.users.id 참조, FK 아님',
+    professor_id        BIGINT COMMENT 'Academic.users.id 참조, FK 아님',
+    document_type       VARCHAR(30) NOT NULL COMMENT 'ENROLLMENT, GRADUATION, GRADE, EMPLOYMENT, PAYMENT_CERTIFICATE',
+    issued_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    file_path           VARCHAR(500),
+    verification_token  VARCHAR(100) NOT NULL,
+    qr_hash             VARCHAR(100),
+    revoked_at          DATETIME,
+    created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_documents_verification_token (verification_token),
+    INDEX idx_documents_student_id (student_id),
+    CONSTRAINT chk_documents_owner_exclusive CHECK (
+        (student_id IS NOT NULL AND professor_id IS NULL) OR (student_id IS NULL AND professor_id IS NOT NULL)
+    )
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- SCRUM-177(실패한 환불 재시도, 비기능 #26) - 재시도 횟수를 남겨 "최종 실패" 상태를 판단할 근거로 쓴다.
+ALTER TABLE refunds ADD COLUMN retry_count INT NOT NULL DEFAULT 0;

@@ -111,6 +111,14 @@ public class TuitionBillService {
                 .orElseThrow(() -> new TuitionBillNotFoundException("해당 등록금 고지를 찾을 수 없습니다."));
     }
 
+    /**
+     * SCRUM-112 - 다른 도메인(payment 등)이 고지 상태를 바꿔야 할 때 이 공개 메서드를 거친다(B1번 패키지 경계).
+     */
+    @Transactional
+    public void changeStatus(Long tuitionBillId, TuitionBillStatus status) {
+        getTuitionBillOrThrow(tuitionBillId).changeStatus(status);
+    }
+
     private Long resolveStudentId(CurrentUser currentUser) {
         return academicClient.findStudentByUserId(currentUser.id()).id();
     }
