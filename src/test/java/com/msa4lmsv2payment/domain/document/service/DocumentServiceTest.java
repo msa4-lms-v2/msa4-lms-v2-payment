@@ -2,7 +2,7 @@ package com.msa4lmsv2payment.domain.document.service;
 
 import com.msa4lmsv2payment.domain.document.entity.Document;
 import com.msa4lmsv2payment.domain.document.entity.DocumentType;
-import com.msa4lmsv2payment.domain.document.error.PaymentNotCompletedException;
+import com.msa4lmsv2payment.global.error.PaymentNotCompletedException;
 import com.msa4lmsv2payment.domain.document.repository.DocumentRepository;
 import com.msa4lmsv2payment.domain.document.request.PaymentReceiptRequestDTO;
 import com.msa4lmsv2payment.domain.payment.service.PaymentService;
@@ -39,13 +39,8 @@ class DocumentServiceTest {
     private DocumentService documentService;
 
     private static TuitionBill tuitionBill(Long id) {
-        TuitionBill bill = new TuitionBill();
+        TuitionBill bill = new TuitionBill(20260001L, 5L, BigDecimal.valueOf(4_200_000), LocalDate.of(2026, 9, 1), TuitionBillStatus.PAID, 1L);
         setField(bill, "id", id);
-        setField(bill, "studentId", 20260001L);
-        setField(bill, "semesterId", 5L);
-        setField(bill, "billingAmount", BigDecimal.valueOf(4_200_000));
-        setField(bill, "dueDate", LocalDate.of(2026, 9, 1));
-        setField(bill, "status", TuitionBillStatus.PAID);
         return bill;
     }
 
