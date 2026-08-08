@@ -1,12 +1,15 @@
 package com.msa4lmsv2payment.global.client;
 
+import com.msa4lmsv2payment.global.error.AcademicResourceNotFoundException;
 import com.msa4lmsv2payment.global.error.NotStudentAccountException;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Academic이 없어도 로컬 개발·테스트·발표 백업으로 단독 기동하기 위한 고정값 스텁 - MY-PLAN_payment.md 4-1절.
@@ -22,6 +25,10 @@ public class AcademicStubClient implements AcademicClient {
             1L, 20260001L,
             2L, 20260002L
     );
+    private static final Set<Long> KNOWN_STUDENT_IDS = Set.of(20260001L, 20260002L);
+    // 7-3절 기준값(2026-2학기, 개강 9/1·종강 12/18)
+    private static final LocalDate SEMESTER_START_DATE = LocalDate.of(2026, 9, 1);
+    private static final LocalDate SEMESTER_END_DATE = LocalDate.of(2026, 12, 18);
 
     @PostConstruct
     public void warnStubActive() {
@@ -36,5 +43,18 @@ public class AcademicStubClient implements AcademicClient {
             throw new NotStudentAccountException("학생 계정이 아니거나 존재하지 않는 사용자입니다.");
         }
         return new AcademicStudentResponse(studentId, userId, "ENROLLED");
+    }
+
+    @Override
+    public AcademicStudentExistsResponse findStudent(Long studentId) {
+        if (!KNOWN_STUDENT_IDS.contains(studentId)) {
+            throw new AcademicResourceNotFoundException("존재하지 않는 학번입니다: " + studentId);
+        }
+        return new AcademicStudentExistsResponse(studentId, "ENROLLED");
+    }
+
+    @Override
+    public AcademicSemesterResponse findSemester(Long semesterId) {
+        return new AcademicSemesterResponse(semesterId, "SECOND", true, SEMESTER_START_DATE, SEMESTER_END_DATE);
     }
 }
