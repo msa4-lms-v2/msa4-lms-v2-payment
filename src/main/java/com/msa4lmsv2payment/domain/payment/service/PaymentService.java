@@ -122,6 +122,13 @@ public class PaymentService {
         tuitionBillService.changeStatus(tuitionBill.getId(), status);
     }
 
+    /**
+     * SCRUM-114 - 다른 도메인(document 등)이 납부 완료 여부를 확인해야 할 때 이 공개 메서드를 거친다(B1번 패키지 경계).
+     */
+    public boolean hasSucceededPayment(Long tuitionBillId) {
+        return !paymentRepository.findByTuitionBillIdAndStatus(tuitionBillId, PaymentStatus.SUCCEEDED).isEmpty();
+    }
+
     // SCRUM-113: 납부 현황 반영(읽기)
     public PaymentSummaryResponseDTO getPaymentSummary(CurrentUser currentUser, Long tuitionBillId) {
         TuitionBill tuitionBill = tuitionBillService.getOwnedTuitionBillOrThrow(currentUser, tuitionBillId);
