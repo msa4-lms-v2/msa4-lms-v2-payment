@@ -47,8 +47,8 @@ public class VirtualAccountService {
 
         VirtualAccount virtualAccount = virtualAccountRepository.save(new VirtualAccount(
                 tuitionBill.getId(),
-                tossResponse.accountNumber(),
-                tossResponse.bankCode(),
+                tossResponse.virtualAccount().accountNumber(),
+                tossResponse.virtualAccount().bankCode(),
                 LocalDateTime.now().plusHours(DEFAULT_VALID_HOURS),
                 VirtualAccountStatus.ISSUED
         ));

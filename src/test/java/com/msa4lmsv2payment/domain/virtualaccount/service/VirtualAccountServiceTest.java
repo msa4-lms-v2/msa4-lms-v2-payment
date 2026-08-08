@@ -71,7 +71,8 @@ class VirtualAccountServiceTest {
         TuitionBill bill = tuitionBill(1L, BigDecimal.valueOf(4_200_000));
         when(tuitionBillService.getOwnedTuitionBillOrThrow(admin, 1L)).thenReturn(bill);
         when(tossPaymentsClient.issueVirtualAccount(anyString(), anyString(), any(), anyString(), anyString()))
-                .thenReturn(new TossVirtualAccountIssueResponse("X1234567890", "020", "2026-09-08T00:00:00"));
+                .thenReturn(new TossVirtualAccountIssueResponse(
+                        new TossVirtualAccountIssueResponse.VirtualAccountInfo("X1234567890", "020", "2026-09-08T00:00:00")));
         when(virtualAccountRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         var result = virtualAccountService.issueVirtualAccount(admin, new VirtualAccountIssueRequestDTO(1L, "020", "홍길동"));
