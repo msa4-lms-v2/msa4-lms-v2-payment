@@ -1,6 +1,7 @@
 package com.msa4lmsv2payment.domain.scholarship.service;
 
 import com.msa4lmsv2payment.domain.scholarship.entity.Scholarship;
+import com.msa4lmsv2payment.domain.scholarship.error.ScholarshipExceedsBillingAmountException;
 import com.msa4lmsv2payment.domain.scholarship.repository.ScholarshipRepository;
 import com.msa4lmsv2payment.domain.scholarship.request.PaymentScholarshipAllocationRequestDTO;
 import com.msa4lmsv2payment.domain.scholarship.request.ScholarshipDiscountRequestDTO;
@@ -25,7 +26,16 @@ public class ScholarshipService {
 
     @Transactional
     public ScholarshipResponseDTO applyScholarshipDiscount(CurrentUser currentUser, ScholarshipDiscountRequestDTO request) {
-        tuitionBillService.getTuitionBillOrThrow(request.tuitionBillId());
+        TuitionBill tuitionBill = tuitionBillService.getTuitionBillOrThrow(request.tuitionBillId());
+
+        BigDecimal existingTotal = scholarshipRepository.findByTuitionBillId(tuitionBill.getId()).stream()
+                .map(Scholarship::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        if (existingTotal.add(request.amount()).compareTo(tuitionBill.getBillingAmount()) > 0) {
+            throw new ScholarshipExceedsBillingAmountException(
+                    "장학금 합계가 등록금 고지 금액을 초과할 수 없습니다.");
+        }
 
         Scholarship scholarship = new Scholarship(
                 request.tuitionBillId(),
@@ -45,7 +55,8 @@ public class ScholarshipService {
                 .map(Scholarship::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        BigDecimal actualPaymentAmount = tuitionBill.getBillingAmount().subtract(totalScholarshipAmount);
+        // applyScholarshipDiscount가 생성 시점에 합계 초과를 막지만, 그 방어를 우회한 데이터가 있을 경우의 최종 방어선.
+        BigDecimal actualPaymentAmount = tuitionBill.getBillingAmount().subtract(totalScholarshipAmount).max(BigDecimal.ZERO);
 
         return new PaymentScholarshipAllocationResponseDTO(
                 tuitionBill.getId(),
