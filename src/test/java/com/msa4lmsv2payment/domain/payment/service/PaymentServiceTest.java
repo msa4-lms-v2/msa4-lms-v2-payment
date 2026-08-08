@@ -3,8 +3,8 @@ package com.msa4lmsv2payment.domain.payment.service;
 import com.msa4lmsv2payment.domain.payment.entity.Payment;
 import com.msa4lmsv2payment.domain.payment.entity.PaymentMethod;
 import com.msa4lmsv2payment.domain.payment.entity.PaymentStatus;
-import com.msa4lmsv2payment.domain.payment.error.PaymentAmountMismatchException;
-import com.msa4lmsv2payment.domain.payment.error.PaymentNotFoundException;
+import com.msa4lmsv2payment.global.error.PaymentAmountMismatchException;
+import com.msa4lmsv2payment.global.error.PaymentNotFoundException;
 import com.msa4lmsv2payment.domain.payment.repository.PaymentRepository;
 import com.msa4lmsv2payment.domain.payment.request.CheckoutSessionRequestDTO;
 import com.msa4lmsv2payment.domain.payment.request.PaymentAmountValidationRequestDTO;
@@ -55,13 +55,8 @@ class PaymentServiceTest {
     private PaymentService paymentService;
 
     private static TuitionBill tuitionBill(Long id, BigDecimal amount) {
-        TuitionBill bill = new TuitionBill();
+        TuitionBill bill = new TuitionBill(20260001L, 5L, amount, LocalDate.of(2026, 9, 1), TuitionBillStatus.UNPAID, 1L);
         setField(bill, "id", id);
-        setField(bill, "studentId", 20260001L);
-        setField(bill, "semesterId", 5L);
-        setField(bill, "billingAmount", amount);
-        setField(bill, "dueDate", LocalDate.of(2026, 9, 1));
-        setField(bill, "status", TuitionBillStatus.UNPAID);
         return bill;
     }
 

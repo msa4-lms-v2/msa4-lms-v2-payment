@@ -2,8 +2,8 @@ package com.msa4lmsv2payment.domain.tuitionbill.service;
 
 import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBill;
 import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBillStatus;
-import com.msa4lmsv2payment.domain.tuitionbill.error.TuitionBillAccessDeniedException;
-import com.msa4lmsv2payment.domain.tuitionbill.error.TuitionBillNotFoundException;
+import com.msa4lmsv2payment.global.error.TuitionBillAccessDeniedException;
+import com.msa4lmsv2payment.global.error.TuitionBillNotFoundException;
 import com.msa4lmsv2payment.domain.tuitionbill.repository.TuitionBillQueryRepository;
 import com.msa4lmsv2payment.domain.tuitionbill.repository.TuitionBillRepository;
 import com.msa4lmsv2payment.domain.tuitionbill.request.TuitionBillCreateRequestDTO;
@@ -49,13 +49,8 @@ class TuitionBillServiceTest {
     private TuitionBillService tuitionBillService;
 
     private static TuitionBill tuitionBill(Long id, Long studentId, BigDecimal amount, TuitionBillStatus status) {
-        TuitionBill bill = new TuitionBill();
+        TuitionBill bill = new TuitionBill(studentId, 1L, amount, LocalDate.of(2026, 9, 1), status, 1L);
         setField(bill, "id", id);
-        setField(bill, "studentId", studentId);
-        setField(bill, "semesterId", 1L);
-        setField(bill, "billingAmount", amount);
-        setField(bill, "dueDate", LocalDate.of(2026, 9, 1));
-        setField(bill, "status", status);
         return bill;
     }
 

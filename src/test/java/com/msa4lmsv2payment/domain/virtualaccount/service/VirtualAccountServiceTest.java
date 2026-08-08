@@ -4,7 +4,7 @@ import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBill;
 import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBillStatus;
 import com.msa4lmsv2payment.domain.tuitionbill.service.TuitionBillService;
 import com.msa4lmsv2payment.domain.virtualaccount.entity.VirtualAccount;
-import com.msa4lmsv2payment.domain.virtualaccount.error.VirtualAccountNotFoundException;
+import com.msa4lmsv2payment.global.error.VirtualAccountNotFoundException;
 import com.msa4lmsv2payment.domain.virtualaccount.repository.VirtualAccountRepository;
 import com.msa4lmsv2payment.domain.virtualaccount.request.VirtualAccountIssueRequestDTO;
 import com.msa4lmsv2payment.global.audit.AuditLogRecorder;
@@ -44,20 +44,11 @@ class VirtualAccountServiceTest {
     private VirtualAccountService virtualAccountService;
 
     private static TuitionBill tuitionBill(Long id, BigDecimal amount) {
-        TuitionBill bill = new TuitionBill();
+        TuitionBill bill = new TuitionBill(20260001L, 1L, amount, LocalDate.of(2026, 9, 1), TuitionBillStatus.UNPAID, 1L);
         try {
             Field idField = TuitionBill.class.getDeclaredField("id");
             idField.setAccessible(true);
             idField.set(bill, id);
-            Field amountField = TuitionBill.class.getDeclaredField("billingAmount");
-            amountField.setAccessible(true);
-            amountField.set(bill, amount);
-            Field statusField = TuitionBill.class.getDeclaredField("status");
-            statusField.setAccessible(true);
-            statusField.set(bill, TuitionBillStatus.UNPAID);
-            Field dueDateField = TuitionBill.class.getDeclaredField("dueDate");
-            dueDateField.setAccessible(true);
-            dueDateField.set(bill, LocalDate.of(2026, 9, 1));
         } catch (ReflectiveOperationException e) {
             throw new RuntimeException(e);
         }
