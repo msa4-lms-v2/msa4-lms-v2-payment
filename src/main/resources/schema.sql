@@ -132,3 +132,6 @@ CREATE TABLE IF NOT EXISTS documents (
         (student_id IS NOT NULL AND professor_id IS NULL) OR (student_id IS NULL AND professor_id IS NOT NULL)
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- SCRUM-177(실패한 환불 재시도, 비기능 #26) - 재시도 횟수를 남겨 "최종 실패" 상태를 판단할 근거로 쓴다.
+ALTER TABLE refunds ADD COLUMN retry_count INT NOT NULL DEFAULT 0;

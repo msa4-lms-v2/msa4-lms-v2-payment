@@ -5,7 +5,10 @@ import com.msa4lmsv2payment.domain.refund.entity.Refund;
 import com.msa4lmsv2payment.domain.refund.entity.RefundStatus;
 import com.msa4lmsv2payment.domain.refund.entity.RefundType;
 import com.msa4lmsv2payment.domain.refund.error.RefundNotFoundException;
+import com.msa4lmsv2payment.domain.refund.error.RefundNotRetryableException;
+import com.msa4lmsv2payment.domain.refund.error.RefundRetryLimitExceededException;
 import com.msa4lmsv2payment.domain.refund.repository.RefundRepository;
+import com.msa4lmsv2payment.domain.refund.request.RefundRetryRequestDTO;
 import com.msa4lmsv2payment.domain.refund.request.VirtualAccountRefundRequestDTO;
 import com.msa4lmsv2payment.domain.refund.request.WithdrawalRefundRateRequestDTO;
 import com.msa4lmsv2payment.domain.refund.response.RefundResponseDTO;
@@ -168,6 +171,48 @@ class RefundServiceTest {
 
         assertThatThrownBy(() -> refundService.requestVirtualAccountRefund(admin, new VirtualAccountRefundRequestDTO(1L)))
                 .isInstanceOf(RefundNotFoundException.class);
+    }
+
+    // SCRUM-177: 실패한 환불 재시도
+    @Test
+    void 실패한_환불은_재시도되고_횟수가_증가한다() {
+        CurrentUser admin = new CurrentUser(1L, "ADMIN");
+        TuitionBill bill = tuitionBill(1L, BigDecimal.valueOf(4_200_000));
+        when(tuitionBillService.getOwnedTuitionBillOrThrow(admin, 1L)).thenReturn(bill);
+        Refund existing = new Refund(1L, RefundType.WITHDRAWAL, BigDecimal.valueOf(3_499_860), new BigDecimal("0.8333"), RefundStatus.FAILED);
+        setField(existing, "retryCount", 1);
+        when(refundRepository.findByTuitionBillIdAndRefundType(1L, RefundType.WITHDRAWAL)).thenReturn(Optional.of(existing));
+        when(refundRepository.save(org.mockito.ArgumentMatchers.any())).thenAnswer(inv -> inv.getArgument(0));
+
+        RefundResponseDTO result = refundService.retryFailedRefund(admin, new RefundRetryRequestDTO(1L));
+
+        assertThat(result.status()).isEqualTo(RefundStatus.RETRYING);
+        assertThat(result.retryCount()).isEqualTo(2);
+    }
+
+    @Test
+    void FAILED가_아니면_재시도가_거부된다() {
+        CurrentUser admin = new CurrentUser(1L, "ADMIN");
+        TuitionBill bill = tuitionBill(1L, BigDecimal.valueOf(4_200_000));
+        when(tuitionBillService.getOwnedTuitionBillOrThrow(admin, 1L)).thenReturn(bill);
+        Refund existing = new Refund(1L, RefundType.WITHDRAWAL, BigDecimal.valueOf(3_499_860), new BigDecimal("0.8333"), RefundStatus.REQUESTED);
+        when(refundRepository.findByTuitionBillIdAndRefundType(1L, RefundType.WITHDRAWAL)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> refundService.retryFailedRefund(admin, new RefundRetryRequestDTO(1L)))
+                .isInstanceOf(RefundNotRetryableException.class);
+    }
+
+    @Test
+    void 재시도_횟수를_초과하면_최종_실패로_거부된다() {
+        CurrentUser admin = new CurrentUser(1L, "ADMIN");
+        TuitionBill bill = tuitionBill(1L, BigDecimal.valueOf(4_200_000));
+        when(tuitionBillService.getOwnedTuitionBillOrThrow(admin, 1L)).thenReturn(bill);
+        Refund existing = new Refund(1L, RefundType.WITHDRAWAL, BigDecimal.valueOf(3_499_860), new BigDecimal("0.8333"), RefundStatus.FAILED);
+        setField(existing, "retryCount", 3);
+        when(refundRepository.findByTuitionBillIdAndRefundType(1L, RefundType.WITHDRAWAL)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> refundService.retryFailedRefund(admin, new RefundRetryRequestDTO(1L)))
+                .isInstanceOf(RefundRetryLimitExceededException.class);
     }
 
     private static void setField(VirtualAccount target, String name, Object value) {

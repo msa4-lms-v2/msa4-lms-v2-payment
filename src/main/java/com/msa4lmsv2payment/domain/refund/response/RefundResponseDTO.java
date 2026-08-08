@@ -12,7 +12,8 @@ public record RefundResponseDTO(
         RefundType refundType,
         BigDecimal amount,
         BigDecimal refundRate,
-        RefundStatus status
+        RefundStatus status,
+        Integer retryCount
 ) {
     public static RefundResponseDTO from(Refund refund) {
         return new RefundResponseDTO(
@@ -21,7 +22,8 @@ public record RefundResponseDTO(
                 refund.getRefundType(),
                 refund.getAmount(),
                 refund.getRefundRate(),
-                refund.getStatus()
+                refund.getStatus(),
+                refund.getRetryCount()
         );
     }
 }

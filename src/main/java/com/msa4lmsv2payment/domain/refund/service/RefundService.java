@@ -5,7 +5,10 @@ import com.msa4lmsv2payment.domain.refund.entity.Refund;
 import com.msa4lmsv2payment.domain.refund.entity.RefundStatus;
 import com.msa4lmsv2payment.domain.refund.entity.RefundType;
 import com.msa4lmsv2payment.domain.refund.error.RefundNotFoundException;
+import com.msa4lmsv2payment.domain.refund.error.RefundNotRetryableException;
+import com.msa4lmsv2payment.domain.refund.error.RefundRetryLimitExceededException;
 import com.msa4lmsv2payment.domain.refund.repository.RefundRepository;
+import com.msa4lmsv2payment.domain.refund.request.RefundRetryRequestDTO;
 import com.msa4lmsv2payment.domain.refund.request.VirtualAccountRefundRequestDTO;
 import com.msa4lmsv2payment.domain.refund.request.WithdrawalRefundRateRequestDTO;
 import com.msa4lmsv2payment.domain.refund.response.RefundResponseDTO;
@@ -32,6 +35,8 @@ import java.util.Map;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class RefundService {
+
+    private static final int MAX_RETRY_ATTEMPTS = 3;
 
     private final RefundRepository refundRepository;
     private final TuitionBillService tuitionBillService;
@@ -82,6 +87,31 @@ public class RefundService {
                         "먼저 자퇴 처리일 기준 환불률을 적용해야 합니다(PATCH /api/academic-status/withdrawal-refund-rate)."));
 
         refund.linkVirtualAccount(virtualAccount.getId());
+
+        return RefundResponseDTO.from(refund);
+    }
+
+    // SCRUM-177: 실패한 환불 재시도 - FAILED 상태만 재시도할 수 있고, MAX_RETRY_ATTEMPTS를 넘으면 최종 실패로 본다(비기능 #26).
+    // 소유권 검증이 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다(B3번).
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public RefundResponseDTO retryFailedRefund(CurrentUser currentUser, RefundRetryRequestDTO request) {
+        TuitionBill tuitionBill = tuitionBillService.getOwnedTuitionBillOrThrow(currentUser, request.tuitionBillId());
+        Refund refund = refundRepository.findByTuitionBillIdAndRefundType(tuitionBill.getId(), RefundType.WITHDRAWAL)
+                .orElseThrow(() -> new RefundNotFoundException("환불 요청을 찾을 수 없습니다."));
+
+        if (refund.getStatus() != RefundStatus.FAILED) {
+            throw new RefundNotRetryableException("실패 상태의 환불만 재시도할 수 있습니다.");
+        }
+        if (refund.getRetryCount() >= MAX_RETRY_ATTEMPTS) {
+            throw new RefundRetryLimitExceededException(
+                    "재시도 횟수(" + MAX_RETRY_ATTEMPTS + "회)를 초과해 재시도할 수 없습니다. 최종 실패 상태입니다.");
+        }
+
+        refund.retry();
+        refund = refundRepository.save(refund);
+
+        auditLogRecorder.record(currentUser.id(), AuditAction.REFUND_RETRIED, "REFUND", refund.getId(),
+                Map.of("retryCount", refund.getRetryCount()), null);
 
         return RefundResponseDTO.from(refund);
     }
