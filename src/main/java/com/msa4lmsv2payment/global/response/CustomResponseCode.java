@@ -17,6 +17,7 @@ public enum CustomResponseCode {
     INVALID_PARAMETER("E21", HttpStatus.BAD_REQUEST),
 
     ACADEMIC_SERVICE_UNAVAILABLE("E89", HttpStatus.SERVICE_UNAVAILABLE),
+    TOSS_SERVICE_UNAVAILABLE("E88", HttpStatus.SERVICE_UNAVAILABLE),
     SYSTEM_ERROR("E99", HttpStatus.INTERNAL_SERVER_ERROR);
 
     private final String code;
