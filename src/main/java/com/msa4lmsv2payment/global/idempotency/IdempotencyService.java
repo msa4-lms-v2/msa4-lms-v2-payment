@@ -39,7 +39,7 @@ public class IdempotencyService {
             return;
         }
 
-        IdempotencyKey key = existing.get();
+        IdempotencyKey key = existing.orElseThrow();
         if (!key.getRequestHash().equals(requestHash)) {
             throw new IdempotencyKeyConflictException("이미 다른 요청에 사용된 Idempotency-Key입니다.");
         }
