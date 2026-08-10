@@ -70,6 +70,9 @@ public class Refund {
         this.virtualAccountId = virtualAccountId;
     }
 
+    // week-4(virtual_account_deposits 입금검증) 구현 시 이 메서드를 호출하는 지점에서
+    // TuitionBillService의 납부상태 재계산도 함께 호출해야 한다 - 환불 완료가 tuition_bills.status에 반영되지 않으면
+    // 이미 환불된 고지가 계속 PAID로 남는다(ERD 리뷰 2026-08-10).
     public void succeed() {
         this.status = RefundStatus.SUCCEEDED;
         this.completedAt = LocalDateTime.now();
