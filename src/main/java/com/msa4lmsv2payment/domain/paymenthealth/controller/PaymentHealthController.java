@@ -5,7 +5,6 @@ import com.msa4lmsv2payment.domain.paymenthealth.service.PaymentHealthService;
 import com.msa4lmsv2payment.global.response.GlobalRes;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -13,7 +12,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Payment", description = "PG·가상계좌 외부 연결 확인")
-@SecurityRequirement(name = "bearerAuth")
 @RestController
 @RequiredArgsConstructor
 public class PaymentHealthController {
