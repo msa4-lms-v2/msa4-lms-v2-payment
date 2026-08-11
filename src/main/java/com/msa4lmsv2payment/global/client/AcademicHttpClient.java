@@ -84,7 +84,7 @@ public class AcademicHttpClient implements AcademicClient {
                         })
                         .body(typeRef);
 
-                if (response == null || !response.success()) {
+                if (response == null || !response.isSuccess()) {
                     throw new AcademicServiceUnavailableException("학적 서비스 응답이 올바르지 않습니다.");
                 }
                 return response.data();

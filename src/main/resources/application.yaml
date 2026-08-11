@@ -27,12 +27,13 @@ spring:
       mode: never
 
 security:
-  jwt:
-    secret: ${JWT_SECRET}
+  gateway-context:
+    secret: ${GATEWAY_CONTEXT_SECRET:}
+    allowed-clock-skew: ${GATEWAY_CONTEXT_ALLOWED_CLOCK_SKEW:2m}
 
 academic:
   service:
-    base-url: ${ACADEMIC_SERVICE_BASE_URL:http://localhost:8081}
+    base-url: ${ACADEMIC_SERVICE_BASE_URL:http://localhost:8082}
     token: ${ACADEMIC_SERVICE_TOKEN:}
 
 toss:
