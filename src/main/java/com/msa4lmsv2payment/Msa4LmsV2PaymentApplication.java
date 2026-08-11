@@ -6,6 +6,7 @@ import com.msa4lmsv2payment.global.security.GatewayContextProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
 @EnableConfigurationProperties({
@@ -13,6 +14,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
         WithdrawalRefundRateProperties.class,
         GatewayContextProperties.class
 })
+@EnableScheduling
 public class Msa4LmsV2PaymentApplication {
 
     public static void main(String[] args) {

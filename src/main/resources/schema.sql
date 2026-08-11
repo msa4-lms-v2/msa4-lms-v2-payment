@@ -135,3 +135,11 @@ CREATE TABLE IF NOT EXISTS documents (
 
 -- SCRUM-177(실패한 환불 재시도, 비기능 #26) - 재시도 횟수를 남겨 "최종 실패" 상태를 판단할 근거로 쓴다.
 ALTER TABLE refunds ADD COLUMN retry_count INT NOT NULL DEFAULT 0;
+
+-- 2026-08-10: ERD 리뷰 반영 - applyWithdrawalRefundRate()의 "있으면 갱신, 없으면 생성" 패턴이
+-- DB 제약 없이 앱 로직(findByTuitionBillIdAndRefundType)만으로 중복을 막고 있어 동시요청 경쟁조건에 노출돼 있었다.
+-- 같은 (tuition_bill_id, refund_type) 조합의 두 번째 INSERT를 DB가 직접 거부하게 한다.
+ALTER TABLE refunds ADD CONSTRAINT uk_refunds_tuition_bill_type UNIQUE (tuition_bill_id, refund_type);
+
+-- refund_rate는 0~1 사이 비율인데 계산 로직 버그로 음수·1 초과값이 저장될 여지를 DB 레벨에서 막는다.
+ALTER TABLE refunds ADD CONSTRAINT chk_refunds_rate CHECK (refund_rate BETWEEN 0 AND 1);
