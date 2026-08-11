@@ -26,6 +26,12 @@ spring:
     init:
       mode: never
 
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
 security:
   gateway-context:
     secret: ${GATEWAY_CONTEXT_SECRET:}
