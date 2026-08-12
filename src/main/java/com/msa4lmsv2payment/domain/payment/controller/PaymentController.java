@@ -10,11 +10,15 @@ import com.msa4lmsv2payment.domain.payment.response.PaymentAmountValidationRespo
 import com.msa4lmsv2payment.domain.payment.response.PaymentResponseDTO;
 import com.msa4lmsv2payment.domain.payment.response.PaymentSummaryResponseDTO;
 import com.msa4lmsv2payment.domain.payment.service.PaymentService;
+import com.msa4lmsv2payment.global.config.OpenApiConfig;
 import com.msa4lmsv2payment.global.idempotency.IdempotencyService;
 import com.msa4lmsv2payment.global.response.GlobalRes;
 import com.msa4lmsv2payment.global.security.CurrentUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -76,20 +80,31 @@ public class PaymentController {
     }
 
     // API_SPEC.md 2.1절 - 결제 API는 Idempotency-Key 필수(비멱등 PG 승인 재시도 대비, code_convention.md B17번).
-    @Operation(summary = "PG 결제 요청", description = "결제 금액 검증을 내부 재사용해 위조 금액을 거른 뒤 토스 confirm을 호출하고, 성공·실패 결과를 그 자리에서 저장한다. STUDENT 본인 / ADMIN 관리 범위.")
+    @Operation(summary = "PG 결제 승인", description = """
+            결제창 연동에서 생성한 REQUESTED 거래를 서버 금액과 다시 대조한 뒤 토스 confirm을 호출한다.
+            토스 응답의 orderId, paymentKey, totalAmount를 로컬 거래와 모두 비교하고 일치할 때만 결과와 감사 로그를 원자적으로 저장한다.
+            SUCCEEDED는 종결 상태라 이후 실패 응답으로 역전하지 않는다. STUDENT 본인 / ADMIN 관리 범위.
+            """)
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "confirm 처리 완료(SUCCEEDED 또는 FAILED)"),
-            @ApiResponse(responseCode = "400", description = "결제 금액 불일치"),
+            @ApiResponse(responseCode = "200", description = "승인 완료 또는 완료된 동일 멱등 요청의 저장 응답 재생",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = GlobalRes.class),
+                            examples = @ExampleObject(name = "승인 성공", value = """
+                                    {"code":"00","message":"SUCCESS","data":{"id":10,"tuitionBillId":1,"amount":4200000,"method":"CARD","pgTransactionId":"tgen_20260813_001","status":"SUCCEEDED"}}
+                                    """))),
+            @ApiResponse(responseCode = "400", ref = OpenApiConfig.INVALID_PARAMETER_RESPONSE_REF),
             @ApiResponse(responseCode = "403", description = "본인 고지가 아님"),
-            @ApiResponse(responseCode = "404", description = "존재하지 않는 결제 세션(orderId)"),
-            @ApiResponse(responseCode = "409", description = "Idempotency-Key 재사용 충돌"),
-            @ApiResponse(responseCode = "503", description = "토스페이먼츠 연결 실패(TOSS_SECRET_KEY 미설정 포함)")
+            @ApiResponse(responseCode = "404", ref = OpenApiConfig.NOT_FOUND_RESPONSE_REF),
+            @ApiResponse(responseCode = "409", ref = OpenApiConfig.DUPLICATE_RESPONSE_REF),
+            @ApiResponse(responseCode = "503", ref = OpenApiConfig.DEPENDENCY_UNAVAILABLE_RESPONSE_REF)
     })
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
     @PostMapping(ENDPOINT_PG_REQUESTS)
     public GlobalRes<PaymentResponseDTO> requestPgPayment(
             @AuthenticationPrincipal CurrentUser currentUser,
-            @Parameter(description = "중복 요청 방지 키. 동일 키+동일 요청 재시도는 통과, 다른 요청에 재사용하면 409", required = true)
+            @Parameter(description = """
+                    1~100자의 중복 요청 방지 키. 요청자, endpoint, payload가 모두 같은 완료 요청은 저장된 응답을 재생하며 토스 confirm을 다시 호출하지 않는다.
+                    다른 요청에 키를 재사용하거나 동일 요청이 아직 처리 중이면 409 E11을 반환한다.
+                    """, required = true, schema = @Schema(minLength = 1, maxLength = 100, example = "pay-confirm-20260813-0001"))
             @RequestHeader("Idempotency-Key") String idempotencyKey,
             @RequestBody @Valid PgPaymentRequestDTO request
     ) {
@@ -103,12 +118,13 @@ public class PaymentController {
         return GlobalRes.success(response);
     }
 
-    @Operation(summary = "결제 성공·실패 처리", description = "PG 결제 요청의 confirm 호출이 타임아웃됐을 때 ADMIN이 토스 실제 상태(단건 조회)로 DB를 동기화하는 복구 전용 경로. ADMIN 관리 범위.")
+    @Operation(summary = "결제 결과 수동 동기화", description = "PG 승인 결과가 불명확할 때 ADMIN이 토스 단건 조회 결과로 로컬 거래를 복구한다. orderId, paymentKey, totalAmount를 모두 대조하고 SUCCEEDED 종결 상태를 보호한다.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "동기화 완료(SUCCEEDED 또는 FAILED)"),
             @ApiResponse(responseCode = "403", description = "ADMIN 아님"),
-            @ApiResponse(responseCode = "404", description = "존재하지 않는 결제 세션(orderId)"),
-            @ApiResponse(responseCode = "503", description = "토스페이먼츠 연결 실패(존재하지 않는 결제 포함)")
+            @ApiResponse(responseCode = "404", ref = OpenApiConfig.NOT_FOUND_RESPONSE_REF),
+            @ApiResponse(responseCode = "409", ref = OpenApiConfig.DUPLICATE_RESPONSE_REF),
+            @ApiResponse(responseCode = "503", ref = OpenApiConfig.DEPENDENCY_UNAVAILABLE_RESPONSE_REF)
     })
     @PreAuthorize("hasRole('ADMIN')")
     @PatchMapping("/api/payment/payment-results")

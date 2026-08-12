@@ -23,6 +23,20 @@ class OpenApiConfigTest {
                 assertThat(requirement).containsOnlyKeys(
                         OpenApiConfig.GATEWAY_USER_ID,
                         OpenApiConfig.GATEWAY_USER_ROLE));
+        assertThat(openApi.getComponents().getResponses())
+                .containsKeys(
+                        "GatewayAuthenticationRequired",
+                        "GatewayAccessDenied",
+                        "InvalidToken",
+                        "NotFoundData",
+                        "DuplicateData",
+                        "InvalidParameter",
+                        "DependencyUnavailable",
+                        "DependencyTimeout",
+                        "CircuitOpen",
+                        "ServiceRecovering",
+                        "ManualReviewRequired",
+                        "SystemError");
     }
 
     @Test
@@ -35,5 +49,7 @@ class OpenApiConfigTest {
                 .isEqualTo("#/components/responses/GatewayAuthenticationRequired");
         assertThat(operation.getResponses().get("403").get$ref())
                 .isEqualTo("#/components/responses/GatewayAccessDenied");
+        assertThat(operation.getResponses().get("500").get$ref())
+                .isEqualTo("#/components/responses/SystemError");
     }
 }
