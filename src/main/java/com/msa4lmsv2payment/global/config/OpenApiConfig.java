@@ -19,8 +19,6 @@ public class OpenApiConfig {
 
     static final String GATEWAY_USER_ID = "gatewayUserId";
     static final String GATEWAY_USER_ROLE = "gatewayUserRole";
-    static final String GATEWAY_TIMESTAMP = "gatewayTimestamp";
-    static final String GATEWAY_SIGNATURE = "gatewaySignature";
 
     private static final String AUTHENTICATION_REQUIRED_RESPONSE = "GatewayAuthenticationRequired";
     private static final String ACCESS_DENIED_RESPONSE = "GatewayAccessDenied";
@@ -29,9 +27,7 @@ public class OpenApiConfig {
     public OpenAPI openApi() {
         SecurityRequirement gatewayContext = new SecurityRequirement()
                 .addList(GATEWAY_USER_ID)
-                .addList(GATEWAY_USER_ROLE)
-                .addList(GATEWAY_TIMESTAMP)
-                .addList(GATEWAY_SIGNATURE);
+                .addList(GATEWAY_USER_ROLE);
 
         return new OpenAPI()
                 .info(new Info()
@@ -39,8 +35,8 @@ public class OpenApiConfig {
                         .description("""
                                 등록금·결제·환불·증명서 - Payment·문서 서비스
 
-                                외부 클라이언트가 직접 호출하는 서비스가 아니다. SCG가 JWT를 검증한 뒤 아래 사용자 컨텍스트를 HMAC 서명해 전달한다.
-                                Swagger UI에서 호출하려면 SCG와 같은 방식으로 미리 생성한 네 헤더 값을 입력해야 하며, Gateway 비밀키를 브라우저에 입력하거나 노출하지 않는다.
+                                외부 클라이언트가 직접 호출하는 서비스가 아니다. SCG가 JWT를 검증한 뒤 사용자 컨텍스트(X-User-Id/X-User-Role)를 전달한다.
+                                이 서비스는 인프라 단에서 Gateway 외의 접근이 차단된다는 전제로, 두 헤더 값을 서명 없이 그대로 신뢰한다.
                                 """)
                         .version("v1"))
                 .components(new Components()
@@ -50,18 +46,8 @@ public class OpenApiConfig {
                         .addSecuritySchemes(GATEWAY_USER_ROLE, headerScheme(
                                 "X-User-Role",
                                 "SCG가 인증한 역할. 허용값: STUDENT, PROFESSOR, ADMIN, SYSTEM"))
-                        .addSecuritySchemes(GATEWAY_TIMESTAMP, headerScheme(
-                                "X-Gateway-Timestamp",
-                                "서명 생성 시각의 Unix epoch seconds. 서버 허용 오차 기본값은 ±2분이다."))
-                        .addSecuritySchemes(GATEWAY_SIGNATURE, headerScheme(
-                                "X-Gateway-Signature",
-                                """
-                                        Gateway 전용 비밀키로 만든 HMAC-SHA256 서명의 Base64 URL-safe(no padding) 값.
-                                        정규 문자열: {userId}\\n{role}\\n{timestamp}\\n{HTTP_METHOD}\\n{requestURI}
-                                        예: 1\\nSTUDENT\\n1786406400\\nGET\\n/api/payments/student-tuition
-                                        """))
                         .addResponses(AUTHENTICATION_REQUIRED_RESPONSE, new ApiResponse()
-                                .description("Gateway 사용자 컨텍스트 헤더 누락, 형식 오류, 만료 또는 서명 불일치")
+                                .description("Gateway 사용자 컨텍스트 헤더 누락 또는 형식 오류")
                                 .content(errorContent("E02", "인증이 필요합니다.")))
                         .addResponses(ACCESS_DENIED_RESPONSE, new ApiResponse()
                                 .description("인증된 사용자에게 요청 기능의 역할 또는 소유권이 없음")

@@ -13,8 +13,6 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
-import java.time.Clock;
-
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
@@ -25,11 +23,6 @@ public class SecurityConfig {
     private final GatewayAuthenticationEntryPoint gatewayAuthenticationEntryPoint;
     private final GatewayAccessDeniedHandler gatewayAccessDeniedHandler;
     private final Environment environment;
-
-    @Bean
-    public static Clock gatewayContextClock() {
-        return Clock.systemUTC();
-    }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {

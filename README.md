@@ -2,22 +2,12 @@
 
 ## Gateway 사용자 컨텍스트
 
-Payment는 클라이언트 JWT를 직접 검증하지 않는다. SCG가 JWT 검증 후 다음 헤더를 생성하고 HMAC으로 서명해야 한다.
+Payment는 클라이언트 JWT를 직접 검증하지 않는다. SCG가 JWT 검증 후 다음 헤더를 생성해 전달한다.
 
 - `X-User-Id`
 - `X-User-Role`
-- `X-Gateway-Timestamp`: Unix epoch seconds
-- `X-Gateway-Signature`: HMAC-SHA256 결과의 Base64URL 인코딩(패딩 없음)
 
-서명 입력은 아래 값을 개행으로 연결한다.
-
-```text
-{userId}\n{role}\n{timestamp}\n{HTTP_METHOD}\n{requestURI}
-```
-
-`HTTP_METHOD`는 대문자이며 `requestURI`에는 쿼리 문자열을 포함하지 않는다. SCG와 Payment에 동일한 32바이트 이상의 `GATEWAY_CONTEXT_SECRET`을 환경변수로 주입해야 한다. 기본 허용 시간 오차는 2분이며 `GATEWAY_CONTEXT_ALLOWED_CLOCK_SKEW`로 조정할 수 있다.
-
-서명 환경변수가 없거나 헤더가 변조·만료되면 보호 API는 `401`을 반환한다.
+서명 검증은 하지 않는다 - 인프라 단(네트워크 격리)에서 Payment에 SCG 외의 접근을 차단하는 것을 전제로 한다. 두 헤더가 없거나 형식이 올바르지 않으면(`X-User-Id`가 양의 정수가 아니거나 `X-User-Role`이 `STUDENT`/`PROFESSOR`/`ADMIN`/`SYSTEM`이 아니면) 보호 API는 `401`을 반환한다.
 
 ## Academic 연동
 

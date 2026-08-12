@@ -24,8 +24,7 @@ class GatewayContextAuthenticationFilterTest {
     @Test
     void 검증된_Gateway_컨텍스트로_인증정보를_생성한다() throws Exception {
         GatewayContextVerifier verifier = mock(GatewayContextVerifier.class);
-        when(verifier.isValid(anyString(), anyString(), anyString(), anyString(), anyString(), anyString()))
-                .thenReturn(true);
+        when(verifier.isValid(anyString(), anyString())).thenReturn(true);
         GatewayContextAuthenticationFilter filter = new GatewayContextAuthenticationFilter(verifier);
         MockHttpServletRequest request = requestWithGatewayHeaders();
 
@@ -42,8 +41,7 @@ class GatewayContextAuthenticationFilterTest {
     @Test
     void 검증되지_않은_Gateway_컨텍스트는_인증하지_않는다() throws Exception {
         GatewayContextVerifier verifier = mock(GatewayContextVerifier.class);
-        when(verifier.isValid(anyString(), anyString(), anyString(), anyString(), anyString(), anyString()))
-                .thenReturn(false);
+        when(verifier.isValid(anyString(), anyString())).thenReturn(false);
         GatewayContextAuthenticationFilter filter = new GatewayContextAuthenticationFilter(verifier);
 
         filter.doFilter(requestWithGatewayHeaders(), new MockHttpServletResponse(), new MockFilterChain());
@@ -55,8 +53,6 @@ class GatewayContextAuthenticationFilterTest {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/payments/student-tuition");
         request.addHeader(GatewayContextAuthenticationFilter.USER_ID_HEADER, "1");
         request.addHeader(GatewayContextAuthenticationFilter.USER_ROLE_HEADER, "STUDENT");
-        request.addHeader(GatewayContextAuthenticationFilter.TIMESTAMP_HEADER, "1786406400");
-        request.addHeader(GatewayContextAuthenticationFilter.SIGNATURE_HEADER, "signature");
         return request;
     }
 }
