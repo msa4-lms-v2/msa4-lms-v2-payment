@@ -4,6 +4,8 @@ import com.msa4lmsv2payment.domain.payment.entity.Payment;
 import com.msa4lmsv2payment.domain.payment.entity.PaymentStatus;
 import com.msa4lmsv2payment.global.error.PaymentAmountMismatchException;
 import com.msa4lmsv2payment.global.error.PaymentNotFoundException;
+import com.msa4lmsv2payment.global.error.PaymentResultMismatchException;
+import com.msa4lmsv2payment.global.error.TossServiceUnavailableException;
 import com.msa4lmsv2payment.domain.payment.repository.PaymentRepository;
 import com.msa4lmsv2payment.domain.payment.request.CheckoutSessionRequestDTO;
 import com.msa4lmsv2payment.domain.payment.request.PaymentAmountValidationRequestDTO;
@@ -20,8 +22,6 @@ import com.msa4lmsv2payment.domain.scholarship.service.ScholarshipService;
 import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBill;
 import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBillStatus;
 import com.msa4lmsv2payment.domain.tuitionbill.service.TuitionBillService;
-import com.msa4lmsv2payment.global.audit.AuditAction;
-import com.msa4lmsv2payment.global.audit.AuditLogRecorder;
 import com.msa4lmsv2payment.global.client.TossPaymentResponse;
 import com.msa4lmsv2payment.global.client.TossPaymentsClient;
 import com.msa4lmsv2payment.global.security.CurrentUser;
@@ -31,7 +31,6 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -44,7 +43,7 @@ public class PaymentService {
     private final TuitionBillService tuitionBillService;
     private final ScholarshipService scholarshipService;
     private final TossPaymentsClient tossPaymentsClient;
-    private final AuditLogRecorder auditLogRecorder;
+    private final PaymentResultRecorder paymentResultRecorder;
 
     // SCRUM-51: 결제 금액 검증
     public PaymentAmountValidationResponseDTO validateAmount(CurrentUser currentUser, PaymentAmountValidationRequestDTO request) {
@@ -68,7 +67,7 @@ public class PaymentService {
 
     // SCRUM-115: PG 결제 요청 - 51을 내부 재사용해 위조 금액을 거른 뒤 토스 confirm을 호출하고, 결과를 그 자리에서 저장한다(110 역할 포함).
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    public PaymentResponseDTO requestPgPayment(CurrentUser currentUser, PgPaymentRequestDTO request) {
+    public PaymentResponseDTO requestPgPayment(CurrentUser currentUser, PgPaymentRequestDTO request, String idempotencyKey) {
         Payment payment = findByOrderIdOrThrow(request.orderId());
         tuitionBillService.getOwnedTuitionBillOrThrow(currentUser, payment.getTuitionBillId());
 
@@ -76,8 +75,9 @@ public class PaymentService {
             throw new PaymentAmountMismatchException("결제 금액이 일치하지 않습니다.");
         }
 
-        TossPaymentResponse tossResponse = tossPaymentsClient.confirmPayment(request.paymentKey(), request.orderId(), request.amount());
-        return applyPaymentResult(currentUser.id(), payment, tossResponse);
+        TossPaymentResponse tossResponse = tossPaymentsClient.confirmPayment(
+                request.paymentKey(), request.orderId(), request.amount(), idempotencyKey);
+        return applyPaymentResult(currentUser.id(), payment, tossResponse, request.orderId(), request.paymentKey());
     }
 
     // SCRUM-110: 결제 성공·실패 처리 - confirm 호출이 타임아웃됐을 때 ADMIN이 토스 실제 상태로 DB를 동기화하는 복구용.
@@ -85,22 +85,37 @@ public class PaymentService {
     public PaymentResponseDTO syncPaymentResult(CurrentUser admin, PaymentResultSyncRequestDTO request) {
         Payment payment = findByOrderIdOrThrow(request.orderId());
         TossPaymentResponse tossResponse = tossPaymentsClient.getPayment(request.paymentKey());
-        return applyPaymentResult(admin.id(), payment, tossResponse);
+        return applyPaymentResult(admin.id(), payment, tossResponse, request.orderId(), request.paymentKey());
     }
 
-    private PaymentResponseDTO applyPaymentResult(Long actorId, Payment payment, TossPaymentResponse tossResponse) {
+    private PaymentResponseDTO applyPaymentResult(Long actorId, Payment payment, TossPaymentResponse tossResponse,
+                                                   String expectedOrderId, String expectedPaymentKey) {
+        validateTossResponse(payment, tossResponse, expectedOrderId, expectedPaymentKey);
+        if (payment.isSucceeded()) {
+            if (!tossResponse.isDone() || !payment.getPgTransactionId().equals(tossResponse.paymentKey())) {
+                throw new PaymentResultMismatchException("완료된 결제 결과와 PG 조회 결과가 일치하지 않습니다.");
+            }
+            return PaymentResponseDTO.from(payment);
+        }
         if (tossResponse.isDone()) {
             payment.succeed(tossResponse.paymentKey());
-            paymentRepository.save(payment);
-            auditLogRecorder.record(actorId, AuditAction.PAYMENT_APPROVED, "PAYMENT", payment.getId(),
-                    Map.of("tuitionBillId", payment.getTuitionBillId(), "amount", payment.getAmount()), null);
         } else {
             payment.fail();
-            paymentRepository.save(payment);
-            auditLogRecorder.record(actorId, AuditAction.PAYMENT_FAILED, "PAYMENT", payment.getId(),
-                    Map.of("tossStatus", tossResponse.status() == null ? "UNKNOWN" : tossResponse.status()), null);
         }
-        return PaymentResponseDTO.from(payment);
+        return PaymentResponseDTO.from(paymentResultRecorder.saveWithAudit(actorId, payment, tossResponse.status()));
+    }
+
+    private void validateTossResponse(Payment payment, TossPaymentResponse response,
+                                      String expectedOrderId, String expectedPaymentKey) {
+        if (response == null || response.orderId() == null || response.paymentKey() == null
+                || response.totalAmount() == null || response.status() == null) {
+            throw new TossServiceUnavailableException("토스페이먼츠 결제 응답이 올바르지 않습니다.");
+        }
+        if (!expectedOrderId.equals(response.orderId())
+                || !expectedPaymentKey.equals(response.paymentKey())
+                || payment.getAmount().compareTo(BigDecimal.valueOf(response.totalAmount())) != 0) {
+            throw new PaymentResultMismatchException("PG 결제 결과가 로컬 결제 정보와 일치하지 않습니다.");
+        }
     }
 
     // SCRUM-112: 납부 상태 반영(쓰기) - SUCCEEDED 결제 합계로 tuition_bills.status를 재계산한다.

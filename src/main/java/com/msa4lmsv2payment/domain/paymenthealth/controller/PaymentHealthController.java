@@ -21,7 +21,7 @@ public class PaymentHealthController {
     @Operation(summary = "PG Sandbox 연결 확인", description = "토스페이먼츠 PG 연결 상태(UP/DOWN)를 조회한다. 연결 실패도 200 정상 응답이다.")
     @ApiResponse(responseCode = "200", description = "조회 성공(UP 또는 DOWN)")
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
-    @GetMapping("/api/payments/pg-sandbox-health")
+    @GetMapping("/api/payment/pg-sandbox-health")
     public GlobalRes<HealthCheckResponseDTO> getPgSandboxHealth() {
         return GlobalRes.success(paymentHealthService.checkPgSandboxHealth());
     }
@@ -29,7 +29,7 @@ public class PaymentHealthController {
     @Operation(summary = "가상계좌 API 연결 확인", description = "토스페이먼츠 가상계좌 API 연결 상태(UP/DOWN)를 조회한다. 연결 실패도 200 정상 응답이다.")
     @ApiResponse(responseCode = "200", description = "조회 성공(UP 또는 DOWN)")
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
-    @GetMapping("/api/payments/virtual-account-health")
+    @GetMapping("/api/payment/virtual-account-health")
     public GlobalRes<HealthCheckResponseDTO> getVirtualAccountHealth() {
         return GlobalRes.success(paymentHealthService.checkVirtualAccountHealth());
     }

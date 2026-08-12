@@ -26,7 +26,7 @@ public class GlobalExceptionHandler {
         } else {
             log.warn("[{}] {}", c.getCode(), e.getMessage());
         }
-        return ResponseEntity.status(c.getHttpStatus()).body(GlobalRes.fail(c, e.getMessage(), null));
+        return ResponseEntity.status(c.getHttpStatus()).body(GlobalRes.fail(c, null));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -36,14 +36,14 @@ public class GlobalExceptionHandler {
                 .collect(Collectors.joining(", "));
         log.warn("[{}] {}", CustomResponseCode.INVALID_PARAMETER.getCode(), message);
         return ResponseEntity.status(CustomResponseCode.INVALID_PARAMETER.getHttpStatus())
-                .body(GlobalRes.fail(CustomResponseCode.INVALID_PARAMETER, message, null));
+                .body(GlobalRes.fail(CustomResponseCode.INVALID_PARAMETER, null));
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<GlobalRes<Void>> handleConstraintViolationException(ConstraintViolationException e) {
         log.warn("[{}] {}", CustomResponseCode.INVALID_PARAMETER.getCode(), e.getMessage());
         return ResponseEntity.status(CustomResponseCode.INVALID_PARAMETER.getHttpStatus())
-                .body(GlobalRes.fail(CustomResponseCode.INVALID_PARAMETER, e.getMessage(), null));
+                .body(GlobalRes.fail(CustomResponseCode.INVALID_PARAMETER, null));
     }
 
     @ExceptionHandler(MissingRequestHeaderException.class)
@@ -51,7 +51,7 @@ public class GlobalExceptionHandler {
         String message = "필수 헤더가 누락되었습니다: " + e.getHeaderName();
         log.warn("[{}] {}", CustomResponseCode.INVALID_PARAMETER.getCode(), message);
         return ResponseEntity.status(CustomResponseCode.INVALID_PARAMETER.getHttpStatus())
-                .body(GlobalRes.fail(CustomResponseCode.INVALID_PARAMETER, message, null));
+                .body(GlobalRes.fail(CustomResponseCode.INVALID_PARAMETER, null));
     }
 
     // @PreAuthorize 거부(AuthorizationDeniedException)는 컨트롤러 메서드 내부(AOP)에서 던져져
@@ -60,13 +60,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<GlobalRes<Void>> handleAccessDeniedException(AccessDeniedException e) {
         log.warn("[{}] {}", CustomResponseCode.ACCESS_DENIED.getCode(), e.getMessage());
         return ResponseEntity.status(CustomResponseCode.ACCESS_DENIED.getHttpStatus())
-                .body(GlobalRes.fail(CustomResponseCode.ACCESS_DENIED, "접근 권한이 없습니다.", null));
+                .body(GlobalRes.fail(CustomResponseCode.ACCESS_DENIED, null));
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<GlobalRes<Void>> handleException(Exception e) {
         log.error("[{}] {}", CustomResponseCode.SYSTEM_ERROR.getCode(), e.getMessage(), e);
         return ResponseEntity.status(CustomResponseCode.SYSTEM_ERROR.getHttpStatus())
-                .body(GlobalRes.fail(CustomResponseCode.SYSTEM_ERROR, "일시적인 오류가 발생했습니다.", null));
+                .body(GlobalRes.fail(CustomResponseCode.SYSTEM_ERROR, null));
     }
 }

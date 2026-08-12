@@ -37,7 +37,7 @@ public class ScholarshipController {
     })
     @PreAuthorize("hasRole('ADMIN')")
     @ResponseStatus(HttpStatus.CREATED)
-    @PostMapping("/api/payments/scholarship-discounts")
+    @PostMapping("/api/payment/scholarship-discounts")
     public GlobalRes<ScholarshipResponseDTO> applyScholarshipDiscount(
             @AuthenticationPrincipal CurrentUser currentUser,
             @RequestBody @Valid ScholarshipDiscountRequestDTO request
@@ -52,7 +52,7 @@ public class ScholarshipController {
             @ApiResponse(responseCode = "404", description = "존재하지 않는 고지")
     })
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
-    @PostMapping("/api/payments/payment-scholarship-allocation")
+    @PostMapping("/api/payment/payment-scholarship-allocation")
     public GlobalRes<PaymentScholarshipAllocationResponseDTO> getPaymentScholarshipAllocation(
             @AuthenticationPrincipal CurrentUser currentUser,
             @RequestBody @Valid PaymentScholarshipAllocationRequestDTO request

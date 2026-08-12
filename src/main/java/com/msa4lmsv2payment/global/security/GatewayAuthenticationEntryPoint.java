@@ -27,6 +27,6 @@ public class GatewayAuthenticationEntryPoint implements AuthenticationEntryPoint
         response.setCharacterEncoding("UTF-8");
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.getWriter().write(
-                objectMapper.writeValueAsString(GlobalRes.fail(code, "인증이 필요합니다.", null)));
+                objectMapper.writeValueAsString(GlobalRes.fail(code, null)));
     }
 }

@@ -1,11 +1,11 @@
 package com.msa4lmsv2payment.global.idempotency;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
-import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
@@ -14,9 +14,8 @@ import java.util.Optional;
 
 /**
  * M2번(멱등성 키 소유) - Idempotency-Key 헤더 검증을 각 서비스가 직접 담당한다.
- * 캐시된 응답을 그대로 재생하지는 않는다 - 대신 같은 키+같은 요청이면 하위 로직을 다시 태우는 것을 허용한다
- * (refunds/virtual_accounts 쪽 로직 자체가 이미 upsert 성격이라 재실행해도 결과가 같다).
- * 다른 요청에 같은 키를 재사용하면 거부한다.
+ * 완료된 같은 키+같은 요청은 저장한 응답을 재생하고 하위 로직을 다시 실행하지 않는다.
+ * 요청자, endpoint 또는 payload가 다르면 같은 키를 사용할 수 없다.
  */
 @Service
 @RequiredArgsConstructor
@@ -28,30 +27,70 @@ public class IdempotencyService {
     private final ObjectMapper objectMapper;
 
     @Transactional
-    public void verifyAndReserve(String idempotencyKey, Long requesterId, String endpoint, Object requestBody) {
+    public <T> Optional<T> verifyAndReserve(String idempotencyKey, Long requesterId, String endpoint,
+                                             Object requestBody, Class<T> responseType) {
+        validateKey(idempotencyKey);
         String requestHash = hash(requestBody);
 
         Optional<IdempotencyKey> existing = idempotencyKeyRepository.findByIdempotencyKey(idempotencyKey);
         if (existing.isEmpty()) {
-            idempotencyKeyRepository.save(new IdempotencyKey(
-                    idempotencyKey, requesterId, endpoint, requestHash,
-                    IdempotencyKeyStatus.IN_PROGRESS, LocalDateTime.now().plusDays(EXPIRES_IN_DAYS)));
-            return;
+            try {
+                idempotencyKeyRepository.saveAndFlush(new IdempotencyKey(
+                        idempotencyKey, requesterId, endpoint, requestHash,
+                        IdempotencyKeyStatus.IN_PROGRESS, LocalDateTime.now().plusDays(EXPIRES_IN_DAYS)));
+                return Optional.empty();
+            } catch (DataIntegrityViolationException e) {
+                throw new IdempotencyKeyConflictException("동일한 Idempotency-Key가 동시에 사용되었습니다.");
+            }
         }
 
         IdempotencyKey key = existing.orElseThrow();
-        if (!key.getRequestHash().equals(requestHash)) {
+        if (!key.getRequesterStudentId().equals(requesterId)
+                || !key.getEndpoint().equals(endpoint)
+                || !key.getRequestHash().equals(requestHash)) {
             throw new IdempotencyKeyConflictException("이미 다른 요청에 사용된 Idempotency-Key입니다.");
+        }
+        if (key.getStatus() == IdempotencyKeyStatus.COMPLETED) {
+            if (key.getResponseSnapshot() == null || key.getResponseSnapshot().isBlank()) {
+                throw new IdempotencyKeyConflictException("완료 응답을 복원할 수 없는 Idempotency-Key입니다.");
+            }
+            return Optional.of(deserialize(key.getResponseSnapshot(), responseType));
         }
         if (key.getStatus() == IdempotencyKeyStatus.IN_PROGRESS && !key.isExpired()) {
             throw new IdempotencyKeyConflictException("동일한 요청이 이미 처리 중입니다.");
         }
-        // COMPLETED거나 IN_PROGRESS 상태로 만료된 경우(이전 시도가 중간에 실패한 것으로 간주) 재시도를 허용한다.
+        key.restart(LocalDateTime.now().plusDays(EXPIRES_IN_DAYS));
+        return Optional.empty();
     }
 
     @Transactional
-    public void markCompleted(String idempotencyKey) {
-        idempotencyKeyRepository.findByIdempotencyKey(idempotencyKey).ifPresent(IdempotencyKey::complete);
+    public void markCompleted(String idempotencyKey, Object response) {
+        String snapshot = serialize(response);
+        IdempotencyKey key = idempotencyKeyRepository.findByIdempotencyKey(idempotencyKey)
+                .orElseThrow(() -> new IdempotencyKeyConflictException("예약되지 않은 Idempotency-Key입니다."));
+        key.complete(snapshot);
+    }
+
+    private void validateKey(String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank() || idempotencyKey.length() > 100) {
+            throw new IdempotencyKeyConflictException("Idempotency-Key는 1~100자의 값이어야 합니다.");
+        }
+    }
+
+    private String serialize(Object response) {
+        try {
+            return objectMapper.writeValueAsString(response);
+        } catch (Exception e) {
+            throw new IllegalStateException("멱등 응답을 저장할 수 없습니다.", e);
+        }
+    }
+
+    private <T> T deserialize(String snapshot, Class<T> responseType) {
+        try {
+            return objectMapper.readValue(snapshot, responseType);
+        } catch (Exception e) {
+            throw new IllegalStateException("멱등 응답을 복원할 수 없습니다.", e);
+        }
     }
 
     private String hash(Object requestBody) {
