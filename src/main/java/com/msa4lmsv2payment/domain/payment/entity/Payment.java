@@ -58,13 +58,26 @@ public class Payment {
     }
 
     public void succeed(String pgTransactionId) {
+        if (status == PaymentStatus.SUCCEEDED) {
+            if (!this.pgTransactionId.equals(pgTransactionId)) {
+                throw new IllegalStateException("성공 결제의 PG 거래 ID는 변경할 수 없습니다.");
+            }
+            return;
+        }
         this.pgTransactionId = pgTransactionId;
         this.status = PaymentStatus.SUCCEEDED;
         this.completedAt = LocalDateTime.now();
     }
 
     public void fail() {
+        if (status == PaymentStatus.SUCCEEDED) {
+            throw new IllegalStateException("성공 결제를 실패 상태로 되돌릴 수 없습니다.");
+        }
         this.status = PaymentStatus.FAILED;
         this.completedAt = LocalDateTime.now();
+    }
+
+    public boolean isSucceeded() {
+        return status == PaymentStatus.SUCCEEDED;
     }
 }

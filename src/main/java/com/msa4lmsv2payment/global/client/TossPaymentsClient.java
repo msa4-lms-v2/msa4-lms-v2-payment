@@ -1,6 +1,7 @@
 package com.msa4lmsv2payment.global.client;
 
 import com.msa4lmsv2payment.global.config.TossPaymentsProperties;
+import com.msa4lmsv2payment.global.error.TossPaymentRejectedException;
 import com.msa4lmsv2payment.global.error.TossServiceUnavailableException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatusCode;
@@ -104,10 +105,9 @@ public class TossPaymentsClient {
 
     /**
      * 결제 승인(POST /v1/payments/confirm) - MY-PLAN_payment.md 10-2절, SCRUM-115.
-     * 4xx는 예외로 던지지 않고 응답 그대로 반환한다 - "승인 거부"도 이 API의 정상적인 결과이지 시스템 오류가 아니므로,
-     * 호출부(PaymentService)가 status를 보고 SUCCEEDED/FAILED를 판단한다.
+     * 4xx 오류 응답은 성공 DTO와 구조가 다르므로 업무 오류로 변환하고 로컬 결제 상태를 변경하지 않는다.
      */
-    public TossPaymentResponse confirmPayment(String paymentKey, String orderId, BigDecimal amount) {
+    public TossPaymentResponse confirmPayment(String paymentKey, String orderId, BigDecimal amount, String idempotencyKey) {
         if (!secretKeyConfigured) {
             throw new TossServiceUnavailableException("TOSS_SECRET_KEY가 설정되지 않았습니다.");
         }
@@ -115,12 +115,17 @@ public class TossPaymentsClient {
         try {
             return restClient.post()
                     .uri("/v1/payments/confirm")
+                    .header("Idempotency-Key", idempotencyKey)
                     .body(Map.of("paymentKey", paymentKey, "orderId", orderId, "amount", amount))
                     .retrieve()
                     .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
-                        // 4xx도 몸체에 실패 사유가 담긴 정상 응답이라 예외로 바꾸지 않고 그대로 읽는다.
+                        throw new TossPaymentRejectedException(
+                                "토스페이먼츠 결제 승인 요청이 거부됐습니다(상태 " + res.getStatusCode().value() + ").");
                     })
                     .body(TossPaymentResponse.class);
+
+        } catch (TossPaymentRejectedException e) {
+            throw e;
         } catch (RestClientException e) {
             log.warn("토스페이먼츠 결제 승인 호출 실패: {}", e.getMessage());
             throw new TossServiceUnavailableException("토스페이먼츠 결제 승인에 실패했습니다.");

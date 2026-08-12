@@ -13,6 +13,10 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10
+      connection-timeout: 3000
+      validation-timeout: 1000
 
   jpa:
     hibernate:
@@ -32,10 +36,9 @@ springdoc:
   swagger-ui:
     enabled: false
 
-academic:
-  service:
-    base-url: ${ACADEMIC_SERVICE_BASE_URL:http://localhost:8082}
-    token: ${ACADEMIC_SERVICE_TOKEN:}
+gateway:
+  internal:
+    base-url: ${GATEWAY_INTERNAL_BASE_URL:http://localhost:8080}
 
 toss:
   payments:
@@ -53,6 +56,21 @@ payment:
       rate-under-half: 0.6667
       rate-under-two-thirds: 0.5
       rate-after-two-thirds: 0.0
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db
 
 logging:
   level:

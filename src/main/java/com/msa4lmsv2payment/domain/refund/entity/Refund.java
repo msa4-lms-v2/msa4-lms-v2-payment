@@ -62,6 +62,9 @@ public class Refund {
     }
 
     public void updateRate(BigDecimal amount, BigDecimal refundRate) {
+        if (status == RefundStatus.SUCCEEDED) {
+            throw new IllegalStateException("완료된 환불 금액과 환불률은 변경할 수 없습니다.");
+        }
         this.amount = amount;
         this.refundRate = refundRate;
     }

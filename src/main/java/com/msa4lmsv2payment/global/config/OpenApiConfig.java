@@ -45,13 +45,13 @@ public class OpenApiConfig {
                                 "SCG가 인증한 사용자의 양수 Long 식별자. 예: 1"))
                         .addSecuritySchemes(GATEWAY_USER_ROLE, headerScheme(
                                 "X-User-Role",
-                                "SCG가 인증한 역할. 허용값: STUDENT, PROFESSOR, ADMIN, SYSTEM"))
+                                "SCG가 인증한 사용자 역할. 허용값: STUDENT, PROFESSOR, ADMIN"))
                         .addResponses(AUTHENTICATION_REQUIRED_RESPONSE, new ApiResponse()
                                 .description("Gateway 사용자 컨텍스트 헤더 누락 또는 형식 오류")
-                                .content(errorContent("E02", "인증이 필요합니다.")))
+                                .content(errorContent("E02", "UNAUTHENTICATED")))
                         .addResponses(ACCESS_DENIED_RESPONSE, new ApiResponse()
                                 .description("인증된 사용자에게 요청 기능의 역할 또는 소유권이 없음")
-                                .content(errorContent("E03", "접근 권한이 없습니다."))))
+                                .content(errorContent("E03", "ACCESS_DENIED"))))
                 .addSecurityItem(gatewayContext);
     }
 

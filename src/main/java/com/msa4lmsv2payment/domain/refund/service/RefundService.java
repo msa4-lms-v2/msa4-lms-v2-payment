@@ -69,7 +69,10 @@ public class RefundService {
 
         Refund refund = refundRepository.findByTuitionBillIdAndRefundType(tuitionBill.getId(), RefundType.WITHDRAWAL)
                 .orElseGet(() -> new Refund(tuitionBill.getId(), RefundType.WITHDRAWAL, amount, rate, RefundStatus.REQUESTED));
-        refund.updateRate(amount, rate); // 기존 건 재요청 시에도 최신 환불률로 갱신(비기능 #19)
+        if (refund.getStatus() == RefundStatus.SUCCEEDED) {
+            throw new RefundNotRetryableException("완료된 환불 금액과 환불률은 변경할 수 없습니다.");
+        }
+        refund.updateRate(amount, rate);
         refund = refundRepository.save(refund);
 
         auditLogRecorder.record(currentUser.id(), AuditAction.REFUND_REQUESTED, "REFUND", refund.getId(),
@@ -87,7 +90,7 @@ public class RefundService {
         VirtualAccount virtualAccount = virtualAccountService.getByTuitionBillIdOrThrow(tuitionBill.getId());
         Refund refund = refundRepository.findByTuitionBillIdAndRefundType(tuitionBill.getId(), RefundType.WITHDRAWAL)
                 .orElseThrow(() -> new RefundNotFoundException(
-                        "먼저 자퇴 처리일 기준 환불률을 적용해야 합니다(PATCH /api/academic-status/withdrawal-refund-rate)."));
+                        "먼저 자퇴 처리일 기준 환불률을 적용해야 합니다(PATCH /api/payment/refunds/withdrawal-rate)."));
 
         refund.linkVirtualAccount(virtualAccount.getId());
 

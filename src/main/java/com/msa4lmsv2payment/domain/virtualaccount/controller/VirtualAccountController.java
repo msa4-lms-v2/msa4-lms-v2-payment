@@ -35,7 +35,7 @@ public class VirtualAccountController {
     })
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
     @ResponseStatus(HttpStatus.CREATED)
-    @PostMapping("/api/payments/virtual-accounts")
+    @PostMapping("/api/payment/virtual-accounts")
     public GlobalRes<VirtualAccountResponseDTO> issueVirtualAccount(
             @AuthenticationPrincipal CurrentUser currentUser,
             @RequestBody @Valid VirtualAccountIssueRequestDTO request

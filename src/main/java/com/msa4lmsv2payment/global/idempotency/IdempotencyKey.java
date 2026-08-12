@@ -60,8 +60,15 @@ public class IdempotencyKey {
         this.expiresAt = expiresAt;
     }
 
-    public void complete() {
+    public void complete(String responseSnapshot) {
+        this.responseSnapshot = responseSnapshot;
         this.status = IdempotencyKeyStatus.COMPLETED;
+    }
+
+    public void restart(LocalDateTime expiresAt) {
+        this.responseSnapshot = null;
+        this.status = IdempotencyKeyStatus.IN_PROGRESS;
+        this.expiresAt = expiresAt;
     }
 
     public boolean isExpired() {

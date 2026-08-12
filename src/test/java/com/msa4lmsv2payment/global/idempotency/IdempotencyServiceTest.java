@@ -10,7 +10,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
-import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
@@ -33,40 +33,53 @@ class IdempotencyServiceTest {
         idempotencyService = service();
         when(idempotencyKeyRepository.findByIdempotencyKey("key-1")).thenReturn(Optional.empty());
 
-        assertThatCode(() -> idempotencyService.verifyAndReserve("key-1", 1L, "/api/refunds/virtual-account-requests", "body"))
-                .doesNotThrowAnyException();
+        assertThat(idempotencyService.verifyAndReserve(
+                "key-1", 1L, "/api/payment/refunds/virtual-account-requests", "body", String.class)).isEmpty();
     }
 
     @Test
     void 같은_키_같은_요청_재시도는_통과한다() {
         idempotencyService = service();
-        IdempotencyKey existing = new IdempotencyKey("key-1", 1L, "/api/refunds/virtual-account-requests",
+        IdempotencyKey existing = new IdempotencyKey("key-1", 1L, "/api/payment/refunds/virtual-account-requests",
                 hashOf("body"), IdempotencyKeyStatus.COMPLETED, LocalDateTime.now().plusDays(1));
+        existing.complete(objectMapper.writeValueAsString("cached-response"));
         when(idempotencyKeyRepository.findByIdempotencyKey("key-1")).thenReturn(Optional.of(existing));
 
-        assertThatCode(() -> idempotencyService.verifyAndReserve("key-1", 1L, "/api/refunds/virtual-account-requests", "body"))
-                .doesNotThrowAnyException();
+        assertThat(idempotencyService.verifyAndReserve(
+                "key-1", 1L, "/api/payment/refunds/virtual-account-requests", "body", String.class))
+                .contains("cached-response");
     }
 
     @Test
     void 같은_키_다른_요청은_거부된다() {
         idempotencyService = service();
-        IdempotencyKey existing = new IdempotencyKey("key-1", 1L, "/api/refunds/virtual-account-requests",
+        IdempotencyKey existing = new IdempotencyKey("key-1", 1L, "/api/payment/refunds/virtual-account-requests",
                 hashOf("other-body"), IdempotencyKeyStatus.COMPLETED, LocalDateTime.now().plusDays(1));
         when(idempotencyKeyRepository.findByIdempotencyKey("key-1")).thenReturn(Optional.of(existing));
 
-        assertThatThrownBy(() -> idempotencyService.verifyAndReserve("key-1", 1L, "/api/refunds/virtual-account-requests", "body"))
+        assertThatThrownBy(() -> idempotencyService.verifyAndReserve(
+                "key-1", 1L, "/api/payment/refunds/virtual-account-requests", "body", String.class))
                 .isInstanceOf(IdempotencyKeyConflictException.class);
     }
 
     @Test
     void 처리중인_요청이_아직_만료되지_않았으면_거부된다() {
         idempotencyService = service();
-        IdempotencyKey existing = new IdempotencyKey("key-1", 1L, "/api/refunds/virtual-account-requests",
+        IdempotencyKey existing = new IdempotencyKey("key-1", 1L, "/api/payment/refunds/virtual-account-requests",
                 hashOf("body"), IdempotencyKeyStatus.IN_PROGRESS, LocalDateTime.now().plusDays(1));
         when(idempotencyKeyRepository.findByIdempotencyKey("key-1")).thenReturn(Optional.of(existing));
 
-        assertThatThrownBy(() -> idempotencyService.verifyAndReserve("key-1", 1L, "/api/refunds/virtual-account-requests", "body"))
+        assertThatThrownBy(() -> idempotencyService.verifyAndReserve(
+                "key-1", 1L, "/api/payment/refunds/virtual-account-requests", "body", String.class))
+                .isInstanceOf(IdempotencyKeyConflictException.class);
+    }
+
+    @Test
+    void DB_컬럼보다_긴_멱등키는_저장전에_거부된다() {
+        idempotencyService = service();
+
+        assertThatThrownBy(() -> idempotencyService.verifyAndReserve(
+                "a".repeat(101), 1L, "/api/payment/pg-requests", "body", String.class))
                 .isInstanceOf(IdempotencyKeyConflictException.class);
     }
 

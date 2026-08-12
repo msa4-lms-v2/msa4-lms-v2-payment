@@ -7,7 +7,7 @@ import java.util.Set;
 @Component
 public class GatewayContextVerifier {
 
-    private static final Set<String> ALLOWED_ROLES = Set.of("STUDENT", "PROFESSOR", "ADMIN", "SYSTEM");
+    private static final Set<String> ALLOWED_ROLES = Set.of("STUDENT", "PROFESSOR", "ADMIN");
 
     public boolean isValid(String userId, String role) {
         return isValidUserId(userId) && role != null && ALLOWED_ROLES.contains(role);

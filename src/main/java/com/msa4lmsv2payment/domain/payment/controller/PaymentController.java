@@ -32,12 +32,14 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Optional;
+
 @Tag(name = "Payment", description = "PG 결제·납부 상태 반영")
 @RestController
 @RequiredArgsConstructor
 public class PaymentController {
 
-    private static final String ENDPOINT_PG_REQUESTS = "/api/payments/pg-requests";
+    private static final String ENDPOINT_PG_REQUESTS = "/api/payment/pg-requests";
 
     private final PaymentService paymentService;
     private final IdempotencyService idempotencyService;
@@ -49,7 +51,7 @@ public class PaymentController {
             @ApiResponse(responseCode = "404", description = "존재하지 않는 고지")
     })
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
-    @PostMapping("/api/payments/payment-amount-validation")
+    @PostMapping("/api/payment/payment-amount-validation")
     public GlobalRes<PaymentAmountValidationResponseDTO> validateAmount(
             @AuthenticationPrincipal CurrentUser currentUser,
             @RequestBody @Valid PaymentAmountValidationRequestDTO request
@@ -65,7 +67,7 @@ public class PaymentController {
     })
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
     @ResponseStatus(HttpStatus.CREATED)
-    @PostMapping("/api/payments/checkout-session")
+    @PostMapping("/api/payment/checkout-session")
     public GlobalRes<CheckoutSessionResponseDTO> createCheckoutSession(
             @AuthenticationPrincipal CurrentUser currentUser,
             @RequestBody @Valid CheckoutSessionRequestDTO request
@@ -91,9 +93,13 @@ public class PaymentController {
             @RequestHeader("Idempotency-Key") String idempotencyKey,
             @RequestBody @Valid PgPaymentRequestDTO request
     ) {
-        idempotencyService.verifyAndReserve(idempotencyKey, currentUser.id(), ENDPOINT_PG_REQUESTS, request);
-        PaymentResponseDTO response = paymentService.requestPgPayment(currentUser, request);
-        idempotencyService.markCompleted(idempotencyKey);
+        Optional<PaymentResponseDTO> replay = idempotencyService.verifyAndReserve(
+                idempotencyKey, currentUser.id(), ENDPOINT_PG_REQUESTS, request, PaymentResponseDTO.class);
+        if (replay.isPresent()) {
+            return GlobalRes.success(replay.orElseThrow());
+        }
+        PaymentResponseDTO response = paymentService.requestPgPayment(currentUser, request, idempotencyKey);
+        idempotencyService.markCompleted(idempotencyKey, response);
         return GlobalRes.success(response);
     }
 
@@ -105,7 +111,7 @@ public class PaymentController {
             @ApiResponse(responseCode = "503", description = "토스페이먼츠 연결 실패(존재하지 않는 결제 포함)")
     })
     @PreAuthorize("hasRole('ADMIN')")
-    @PatchMapping("/api/payments/payment-results")
+    @PatchMapping("/api/payment/payment-results")
     public GlobalRes<PaymentResponseDTO> syncPaymentResult(
             @AuthenticationPrincipal CurrentUser admin,
             @RequestBody @Valid PaymentResultSyncRequestDTO request
@@ -120,7 +126,7 @@ public class PaymentController {
             @ApiResponse(responseCode = "404", description = "존재하지 않는 고지")
     })
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
-    @PatchMapping("/api/payments/payment-status")
+    @PatchMapping("/api/payment/payment-status")
     public GlobalRes<Void> recalculateTuitionStatus(
             @AuthenticationPrincipal CurrentUser currentUser,
             @RequestBody @Valid PaymentStatusRequestDTO request
@@ -136,7 +142,7 @@ public class PaymentController {
             @ApiResponse(responseCode = "404", description = "존재하지 않는 고지")
     })
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
-    @GetMapping("/api/payments/payment-summary")
+    @GetMapping("/api/payment/payment-summary")
     public GlobalRes<PaymentSummaryResponseDTO> getPaymentSummary(
             @AuthenticationPrincipal CurrentUser currentUser,
             @RequestParam Long tuitionBillId

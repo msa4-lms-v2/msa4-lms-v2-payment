@@ -41,7 +41,7 @@ public class TuitionBillController {
     })
     @PreAuthorize("hasRole('ADMIN')")
     @ResponseStatus(HttpStatus.CREATED)
-    @PostMapping("/api/payments/tuition-bills")
+    @PostMapping("/api/payment/tuition-bills")
     public GlobalRes<TuitionBillResponseDTO> createTuitionBill(
             @AuthenticationPrincipal CurrentUser admin,
             @RequestBody @Valid TuitionBillCreateRequestDTO request
@@ -56,7 +56,7 @@ public class TuitionBillController {
             @ApiResponse(responseCode = "404", description = "존재하지 않는 고지")
     })
     @PreAuthorize("hasRole('STUDENT')")
-    @GetMapping("/api/payments/student-tuition-bills")
+    @GetMapping("/api/payment/student-tuition-bills")
     public GlobalRes<TuitionBillResponseDTO> getStudentTuitionBill(
             @AuthenticationPrincipal CurrentUser student,
             @RequestParam Long tuitionBillId
@@ -67,7 +67,7 @@ public class TuitionBillController {
     @Operation(summary = "관리자 등록금 목록 조회", description = "ADMIN이 상태별·페이지네이션으로 전체 등록금 고지 목록을 조회한다. ADMIN 관리 범위.")
     @ApiResponse(responseCode = "200", description = "조회 성공")
     @PreAuthorize("hasRole('ADMIN')")
-    @GetMapping("/api/payments/admin-tuition-bills")
+    @GetMapping("/api/payment/admin-tuition-bills")
     public GlobalRes<PageRes<TuitionBillResponseDTO>> getAdminTuitionBills(
             @RequestParam(required = false) TuitionBillStatus status,
             @RequestParam(defaultValue = "1") int page,
@@ -79,7 +79,7 @@ public class TuitionBillController {
     @Operation(summary = "학생별 등록금 조회", description = "STUDENT 본인의 등록금 고지 목록을 조회한다. STUDENT 본인 데이터만 접근 가능.")
     @ApiResponse(responseCode = "200", description = "조회 성공")
     @PreAuthorize("hasRole('STUDENT')")
-    @GetMapping("/api/payments/student-tuition")
+    @GetMapping("/api/payment/student-tuition")
     public GlobalRes<List<TuitionBillResponseDTO>> getStudentTuition(@AuthenticationPrincipal CurrentUser currentUser) {
         return GlobalRes.success(tuitionBillService.getMyTuitionBills(currentUser));
     }
@@ -91,7 +91,7 @@ public class TuitionBillController {
             @ApiResponse(responseCode = "404", description = "존재하지 않는 고지")
     })
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
-    @GetMapping("/api/payments/tuition-payment-status")
+    @GetMapping("/api/payment/tuition-payment-status")
     public GlobalRes<TuitionPaymentStatusResponseDTO> getTuitionPaymentStatus(
             @AuthenticationPrincipal CurrentUser currentUser,
             @RequestParam Long tuitionBillId

@@ -5,6 +5,7 @@ import com.msa4lmsv2payment.domain.payment.entity.PaymentMethod;
 import com.msa4lmsv2payment.domain.payment.entity.PaymentStatus;
 import com.msa4lmsv2payment.global.error.PaymentAmountMismatchException;
 import com.msa4lmsv2payment.global.error.PaymentNotFoundException;
+import com.msa4lmsv2payment.global.error.PaymentResultMismatchException;
 import com.msa4lmsv2payment.domain.payment.repository.PaymentRepository;
 import com.msa4lmsv2payment.domain.payment.request.CheckoutSessionRequestDTO;
 import com.msa4lmsv2payment.domain.payment.request.PaymentAmountValidationRequestDTO;
@@ -16,7 +17,6 @@ import com.msa4lmsv2payment.domain.scholarship.service.ScholarshipService;
 import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBill;
 import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBillStatus;
 import com.msa4lmsv2payment.domain.tuitionbill.service.TuitionBillService;
-import com.msa4lmsv2payment.global.audit.AuditLogRecorder;
 import com.msa4lmsv2payment.global.client.TossPaymentResponse;
 import com.msa4lmsv2payment.global.client.TossPaymentsClient;
 import com.msa4lmsv2payment.global.security.CurrentUser;
@@ -36,6 +36,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class PaymentServiceTest {
@@ -49,7 +50,7 @@ class PaymentServiceTest {
     @Mock
     private TossPaymentsClient tossPaymentsClient;
     @Mock
-    private AuditLogRecorder auditLogRecorder;
+    private PaymentResultRecorder paymentResultRecorder;
 
     @InjectMocks
     private PaymentService paymentService;
@@ -121,12 +122,12 @@ class PaymentServiceTest {
         setField(payment, "id", 7L);
         when(paymentRepository.findById(7L)).thenReturn(Optional.of(payment));
         when(tuitionBillService.getOwnedTuitionBillOrThrow(student, 1L)).thenReturn(tuitionBill(1L, BigDecimal.valueOf(4_200_000)));
-        when(tossPaymentsClient.confirmPayment("pk_test", "PAY-7", BigDecimal.valueOf(4_200_000)))
+        when(tossPaymentsClient.confirmPayment("pk_test", "PAY-7", BigDecimal.valueOf(4_200_000), "idem-1"))
                 .thenReturn(new TossPaymentResponse("pk_test", "PAY-7", "DONE", 4_200_000L));
-        when(paymentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(paymentResultRecorder.saveWithAudit(eq(1L), any(), eq("DONE"))).thenAnswer(inv -> inv.getArgument(1));
 
         var result = paymentService.requestPgPayment(student,
-                new PgPaymentRequestDTO("PAY-7", "pk_test", BigDecimal.valueOf(4_200_000)));
+                new PgPaymentRequestDTO("PAY-7", "pk_test", BigDecimal.valueOf(4_200_000)), "idem-1");
 
         assertThat(result.status()).isEqualTo(PaymentStatus.SUCCEEDED);
         assertThat(result.pgTransactionId()).isEqualTo("pk_test");
@@ -139,12 +140,12 @@ class PaymentServiceTest {
         setField(payment, "id", 7L);
         when(paymentRepository.findById(7L)).thenReturn(Optional.of(payment));
         when(tuitionBillService.getOwnedTuitionBillOrThrow(student, 1L)).thenReturn(tuitionBill(1L, BigDecimal.valueOf(4_200_000)));
-        when(tossPaymentsClient.confirmPayment("pk_test", "PAY-7", BigDecimal.valueOf(4_200_000)))
+        when(tossPaymentsClient.confirmPayment("pk_test", "PAY-7", BigDecimal.valueOf(4_200_000), "idem-1"))
                 .thenReturn(new TossPaymentResponse("pk_test", "PAY-7", "ABORTED", 4_200_000L));
-        when(paymentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(paymentResultRecorder.saveWithAudit(eq(1L), any(), eq("ABORTED"))).thenAnswer(inv -> inv.getArgument(1));
 
         var result = paymentService.requestPgPayment(student,
-                new PgPaymentRequestDTO("PAY-7", "pk_test", BigDecimal.valueOf(4_200_000)));
+                new PgPaymentRequestDTO("PAY-7", "pk_test", BigDecimal.valueOf(4_200_000)), "idem-1");
 
         assertThat(result.status()).isEqualTo(PaymentStatus.FAILED);
     }
@@ -158,7 +159,7 @@ class PaymentServiceTest {
         when(tuitionBillService.getOwnedTuitionBillOrThrow(student, 1L)).thenReturn(tuitionBill(1L, BigDecimal.valueOf(4_200_000)));
 
         assertThatThrownBy(() -> paymentService.requestPgPayment(student,
-                new PgPaymentRequestDTO("PAY-7", "pk_test", BigDecimal.valueOf(1_000))))
+                new PgPaymentRequestDTO("PAY-7", "pk_test", BigDecimal.valueOf(1_000)), "idem-1"))
                 .isInstanceOf(PaymentAmountMismatchException.class);
     }
 
@@ -168,7 +169,7 @@ class PaymentServiceTest {
         when(paymentRepository.findById(999L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> paymentService.requestPgPayment(student,
-                new PgPaymentRequestDTO("PAY-999", "pk_test", BigDecimal.valueOf(1_000))))
+                new PgPaymentRequestDTO("PAY-999", "pk_test", BigDecimal.valueOf(1_000)), "idem-1"))
                 .isInstanceOf(PaymentNotFoundException.class);
     }
 
@@ -181,11 +182,44 @@ class PaymentServiceTest {
         when(paymentRepository.findById(7L)).thenReturn(Optional.of(payment));
         when(tossPaymentsClient.getPayment("pk_test"))
                 .thenReturn(new TossPaymentResponse("pk_test", "PAY-7", "DONE", 4_200_000L));
-        when(paymentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(paymentResultRecorder.saveWithAudit(eq(1L), any(), eq("DONE"))).thenAnswer(inv -> inv.getArgument(1));
 
         var result = paymentService.syncPaymentResult(admin, new PaymentResultSyncRequestDTO("PAY-7", "pk_test"));
 
         assertThat(result.status()).isEqualTo(PaymentStatus.SUCCEEDED);
+    }
+
+    @Test
+    void PG_응답의_orderId가_다르면_로컬_결제에_반영하지_않는다() {
+        CurrentUser admin = new CurrentUser(1L, "ADMIN");
+        Payment payment = new Payment(1L, 20260001L, BigDecimal.valueOf(4_200_000), PaymentMethod.CARD, PaymentStatus.REQUESTED);
+        setField(payment, "id", 7L);
+        when(paymentRepository.findById(7L)).thenReturn(Optional.of(payment));
+        when(tossPaymentsClient.getPayment("pk_test"))
+                .thenReturn(new TossPaymentResponse("pk_test", "PAY-999", "DONE", 4_200_000L));
+
+        assertThatThrownBy(() -> paymentService.syncPaymentResult(
+                admin, new PaymentResultSyncRequestDTO("PAY-7", "pk_test")))
+                .isInstanceOf(PaymentResultMismatchException.class);
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.REQUESTED);
+        verifyNoInteractions(paymentResultRecorder);
+    }
+
+    @Test
+    void 성공한_결제는_실패_응답으로_역전되지_않는다() {
+        CurrentUser admin = new CurrentUser(1L, "ADMIN");
+        Payment payment = new Payment(1L, 20260001L, BigDecimal.valueOf(4_200_000), PaymentMethod.CARD, PaymentStatus.REQUESTED);
+        setField(payment, "id", 7L);
+        payment.succeed("pk_test");
+        when(paymentRepository.findById(7L)).thenReturn(Optional.of(payment));
+        when(tossPaymentsClient.getPayment("pk_test"))
+                .thenReturn(new TossPaymentResponse("pk_test", "PAY-7", "ABORTED", 4_200_000L));
+
+        assertThatThrownBy(() -> paymentService.syncPaymentResult(
+                admin, new PaymentResultSyncRequestDTO("PAY-7", "pk_test")))
+                .isInstanceOf(PaymentResultMismatchException.class);
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
+        verifyNoInteractions(paymentResultRecorder);
     }
 
     // SCRUM-112: 납부 상태 반영

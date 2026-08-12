@@ -35,7 +35,7 @@ public class DocumentController {
     })
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
     @ResponseStatus(HttpStatus.CREATED)
-    @PostMapping("/api/payments/payment-receipts")
+    @PostMapping("/api/payment/payment-receipts")
     public GlobalRes<DocumentResponseDTO> issuePaymentReceipt(
             @AuthenticationPrincipal CurrentUser currentUser,
             @RequestBody @Valid PaymentReceiptRequestDTO request
