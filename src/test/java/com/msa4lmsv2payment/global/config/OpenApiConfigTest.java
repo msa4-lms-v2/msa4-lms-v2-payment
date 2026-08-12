@@ -17,16 +17,12 @@ class OpenApiConfigTest {
         assertThat(openApi.getComponents().getSecuritySchemes())
                 .containsOnlyKeys(
                         OpenApiConfig.GATEWAY_USER_ID,
-                        OpenApiConfig.GATEWAY_USER_ROLE,
-                        OpenApiConfig.GATEWAY_TIMESTAMP,
-                        OpenApiConfig.GATEWAY_SIGNATURE)
+                        OpenApiConfig.GATEWAY_USER_ROLE)
                 .doesNotContainKey("bearerAuth");
         assertThat(openApi.getSecurity()).singleElement().satisfies(requirement ->
                 assertThat(requirement).containsOnlyKeys(
                         OpenApiConfig.GATEWAY_USER_ID,
-                        OpenApiConfig.GATEWAY_USER_ROLE,
-                        OpenApiConfig.GATEWAY_TIMESTAMP,
-                        OpenApiConfig.GATEWAY_SIGNATURE));
+                        OpenApiConfig.GATEWAY_USER_ROLE));
     }
 
     @Test
