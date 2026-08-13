@@ -184,7 +184,7 @@ class PaymentServiceTest {
                 .thenReturn(new TossPaymentResponse("pk_test", "PAY-7", "DONE", 4_200_000L));
         when(paymentResultRecorder.saveWithAudit(eq(1L), any(), eq("DONE"))).thenAnswer(inv -> inv.getArgument(1));
 
-        var result = paymentService.syncPaymentResult(admin, new PaymentResultSyncRequestDTO("PAY-7", "pk_test"));
+        var result = paymentService.syncPaymentResult(admin, 7L, new PaymentResultSyncRequestDTO("pk_test"));
 
         assertThat(result.status()).isEqualTo(PaymentStatus.SUCCEEDED);
     }
@@ -199,7 +199,7 @@ class PaymentServiceTest {
                 .thenReturn(new TossPaymentResponse("pk_test", "PAY-999", "DONE", 4_200_000L));
 
         assertThatThrownBy(() -> paymentService.syncPaymentResult(
-                admin, new PaymentResultSyncRequestDTO("PAY-7", "pk_test")))
+                admin, 7L, new PaymentResultSyncRequestDTO("pk_test")))
                 .isInstanceOf(PaymentResultMismatchException.class);
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.REQUESTED);
         verifyNoInteractions(paymentResultRecorder);
@@ -216,7 +216,7 @@ class PaymentServiceTest {
                 .thenReturn(new TossPaymentResponse("pk_test", "PAY-7", "ABORTED", 4_200_000L));
 
         assertThatThrownBy(() -> paymentService.syncPaymentResult(
-                admin, new PaymentResultSyncRequestDTO("PAY-7", "pk_test")))
+                admin, 7L, new PaymentResultSyncRequestDTO("pk_test")))
                 .isInstanceOf(PaymentResultMismatchException.class);
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
         verifyNoInteractions(paymentResultRecorder);

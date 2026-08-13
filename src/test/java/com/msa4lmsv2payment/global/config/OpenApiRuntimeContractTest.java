@@ -22,13 +22,14 @@ class OpenApiRuntimeContractTest {
 
     @Test
     void generatedOpenApiContainsDetailedPaymentAndRefundContracts() throws Exception {
-        String paymentPath = "$['paths']['/api/payment/pg-requests']['post']";
+        String paymentPath = "$['paths']['/api/payment/payments/confirm']['post']";
         String refundPath = "$['paths']['/api/payment/refunds/virtual-account-requests']['post']";
 
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath(paymentPath).exists())
                 .andExpect(jsonPath(refundPath).exists())
+                .andExpect(jsonPath("$['paths']['/api/payment/pg-requests']").doesNotExist())
                 .andExpect(jsonPath("$['paths']['/api/payments/pg-requests']").doesNotExist())
                 .andExpect(jsonPath(paymentPath + "['description']")
                         .value(containsString("SUCCEEDED는 종결 상태")))

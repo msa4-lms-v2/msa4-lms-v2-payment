@@ -29,6 +29,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -43,7 +44,7 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class PaymentController {
 
-    private static final String ENDPOINT_PG_REQUESTS = "/api/payment/pg-requests";
+    private static final String ENDPOINT_PAYMENTS_CONFIRM = "/api/payment/payments/confirm";
 
     private final PaymentService paymentService;
     private final IdempotencyService idempotencyService;
@@ -71,7 +72,7 @@ public class PaymentController {
     })
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
     @ResponseStatus(HttpStatus.CREATED)
-    @PostMapping("/api/payment/checkout-session")
+    @PostMapping("/api/payment/payments")
     public GlobalRes<CheckoutSessionResponseDTO> createCheckoutSession(
             @AuthenticationPrincipal CurrentUser currentUser,
             @RequestBody @Valid CheckoutSessionRequestDTO request
@@ -98,7 +99,7 @@ public class PaymentController {
             @ApiResponse(responseCode = "503", ref = OpenApiConfig.DEPENDENCY_UNAVAILABLE_RESPONSE_REF)
     })
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
-    @PostMapping(ENDPOINT_PG_REQUESTS)
+    @PostMapping(ENDPOINT_PAYMENTS_CONFIRM)
     public GlobalRes<PaymentResponseDTO> requestPgPayment(
             @AuthenticationPrincipal CurrentUser currentUser,
             @Parameter(description = """
@@ -109,7 +110,7 @@ public class PaymentController {
             @RequestBody @Valid PgPaymentRequestDTO request
     ) {
         Optional<PaymentResponseDTO> replay = idempotencyService.verifyAndReserve(
-                idempotencyKey, currentUser.id(), ENDPOINT_PG_REQUESTS, request, PaymentResponseDTO.class);
+                idempotencyKey, currentUser.id(), ENDPOINT_PAYMENTS_CONFIRM, request, PaymentResponseDTO.class);
         if (replay.isPresent()) {
             return GlobalRes.success(replay.orElseThrow());
         }
@@ -127,12 +128,13 @@ public class PaymentController {
             @ApiResponse(responseCode = "503", ref = OpenApiConfig.DEPENDENCY_UNAVAILABLE_RESPONSE_REF)
     })
     @PreAuthorize("hasRole('ADMIN')")
-    @PatchMapping("/api/payment/payment-results")
+    @PostMapping("/api/payment/payments/{paymentId}/reconciliation")
     public GlobalRes<PaymentResponseDTO> syncPaymentResult(
             @AuthenticationPrincipal CurrentUser admin,
+            @PathVariable Long paymentId,
             @RequestBody @Valid PaymentResultSyncRequestDTO request
     ) {
-        return GlobalRes.success(paymentService.syncPaymentResult(admin, request));
+        return GlobalRes.success(paymentService.syncPaymentResult(admin, paymentId, request));
     }
 
     @Operation(summary = "납부 상태 반영", description = "SUCCEEDED 결제 합계와 실납부액을 비교해 등록금 고지 상태(UNPAID/PARTIAL/PAID)를 재계산한다. STUDENT 본인 / ADMIN 관리 범위.")
