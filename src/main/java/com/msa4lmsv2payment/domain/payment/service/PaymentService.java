@@ -44,6 +44,7 @@ public class PaymentService {
     private final ScholarshipService scholarshipService;
     private final TossPaymentsClient tossPaymentsClient;
     private final PaymentResultRecorder paymentResultRecorder;
+    private final TuitionOverpaymentGuard tuitionOverpaymentGuard;
 
     // SCRUM-51: 결제 금액 검증
     public PaymentAmountValidationResponseDTO validateAmount(CurrentUser currentUser, PaymentAmountValidationRequestDTO request) {
@@ -74,6 +75,8 @@ public class PaymentService {
         if (payment.getAmount().compareTo(request.amount()) != 0) {
             throw new PaymentAmountMismatchException("결제 금액이 일치하지 않습니다.");
         }
+
+        tuitionOverpaymentGuard.guard(payment.getTuitionBillId(), payment.getAmount());
 
         TossPaymentResponse tossResponse = tossPaymentsClient.confirmPayment(
                 request.paymentKey(), request.orderId(), request.amount(), idempotencyKey);
