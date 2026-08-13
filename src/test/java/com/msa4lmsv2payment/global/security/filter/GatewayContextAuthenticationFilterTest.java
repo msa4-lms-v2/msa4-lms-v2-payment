@@ -50,7 +50,7 @@ class GatewayContextAuthenticationFilterTest {
     }
 
     private MockHttpServletRequest requestWithGatewayHeaders() {
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/payment/student-tuition");
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/payment/me/tuition-bills");
         request.addHeader(GatewayContextAuthenticationFilter.USER_ID_HEADER, "1");
         request.addHeader(GatewayContextAuthenticationFilter.USER_ROLE_HEADER, "STUDENT");
         return request;

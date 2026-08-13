@@ -67,7 +67,7 @@ public class TuitionBillController {
     @Operation(summary = "관리자 등록금 목록 조회", description = "ADMIN이 상태별·페이지네이션으로 전체 등록금 고지 목록을 조회한다. ADMIN 관리 범위.")
     @ApiResponse(responseCode = "200", description = "조회 성공")
     @PreAuthorize("hasRole('ADMIN')")
-    @GetMapping("/api/payment/admin-tuition-bills")
+    @GetMapping("/api/payment/tuition-bills")
     public GlobalRes<PageRes<TuitionBillResponseDTO>> getAdminTuitionBills(
             @RequestParam(required = false) TuitionBillStatus status,
             @RequestParam(defaultValue = "1") int page,
@@ -79,7 +79,7 @@ public class TuitionBillController {
     @Operation(summary = "학생별 등록금 조회", description = "STUDENT 본인의 등록금 고지 목록을 조회한다. STUDENT 본인 데이터만 접근 가능.")
     @ApiResponse(responseCode = "200", description = "조회 성공")
     @PreAuthorize("hasRole('STUDENT')")
-    @GetMapping("/api/payment/student-tuition")
+    @GetMapping("/api/payment/me/tuition-bills")
     public GlobalRes<List<TuitionBillResponseDTO>> getStudentTuition(@AuthenticationPrincipal CurrentUser currentUser) {
         return GlobalRes.success(tuitionBillService.getMyTuitionBills(currentUser));
     }
