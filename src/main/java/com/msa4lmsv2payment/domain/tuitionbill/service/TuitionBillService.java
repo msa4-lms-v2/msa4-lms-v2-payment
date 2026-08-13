@@ -9,8 +9,6 @@ import com.msa4lmsv2payment.domain.tuitionbill.repository.TuitionBillRepository;
 import com.msa4lmsv2payment.domain.tuitionbill.request.TuitionBillCreateRequestDTO;
 import com.msa4lmsv2payment.domain.tuitionbill.response.TuitionBillResponseDTO;
 import com.msa4lmsv2payment.domain.tuitionbill.response.TuitionPaymentStatusResponseDTO;
-import com.msa4lmsv2payment.global.audit.AuditAction;
-import com.msa4lmsv2payment.global.audit.AuditLogRecorder;
 import com.msa4lmsv2payment.global.client.AcademicClient;
 import com.msa4lmsv2payment.global.response.PageRes;
 import com.msa4lmsv2payment.global.security.CurrentUser;
@@ -20,7 +18,6 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -32,11 +29,11 @@ public class TuitionBillService {
     private final TuitionBillRepository tuitionBillRepository;
     private final TuitionBillQueryRepository tuitionBillQueryRepository;
     private final AcademicClient academicClient;
-    private final AuditLogRecorder auditLogRecorder;
+    private final TuitionBillRecorder tuitionBillRecorder;
 
     // SCRUM-43: 관리자 등록금 고지
     // Academic 호출(academicClient) 동안 DB 커넥션을 붙잡지 않도록 트랜잭션 밖에서 실행한다(B3번).
-    // save()/record()는 각자 리포지토리·컴포넌트 자신의 트랜잭션으로 별도 커밋된다.
+    // 저장과 감사 로그는 tuitionBillRecorder가 하나의 트랜잭션으로 묶는다(4.6).
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public TuitionBillResponseDTO createTuitionBill(CurrentUser admin, TuitionBillCreateRequestDTO request) {
         academicClient.findStudent(request.studentId());
@@ -50,12 +47,8 @@ public class TuitionBillService {
                 TuitionBillStatus.UNPAID,
                 admin.id()
         );
-        tuitionBillRepository.save(tuitionBill);
 
-        auditLogRecorder.record(admin.id(), AuditAction.TUITION_BILL_CREATED, "TUITION_BILL", tuitionBill.getId(),
-                Map.of("studentId", request.studentId(), "billingAmount", request.billingAmount()), null);
-
-        return TuitionBillResponseDTO.from(tuitionBill);
+        return TuitionBillResponseDTO.from(tuitionBillRecorder.saveWithAudit(admin.id(), tuitionBill));
     }
 
     // SCRUM-77: 학생 등록금 고지서 조회 (43이 만든 고지 단건을 학생이 확인)
