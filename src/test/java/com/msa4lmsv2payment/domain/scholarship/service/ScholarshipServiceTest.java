@@ -59,7 +59,7 @@ class ScholarshipServiceTest {
     void 기존_장학금과_합해_등록금을_넘지_않으면_생성된다() {
         CurrentUser admin = new CurrentUser(1L, "ADMIN");
         TuitionBill bill = tuitionBill(1L, BigDecimal.valueOf(4_200_000));
-        when(tuitionBillService.getTuitionBillOrThrow(1L)).thenReturn(bill);
+        when(tuitionBillService.getTuitionBillForUpdateOrThrow(1L)).thenReturn(bill);
         when(scholarshipRepository.findByTuitionBillId(1L)).thenReturn(List.of());
         when(scholarshipRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -73,7 +73,7 @@ class ScholarshipServiceTest {
     void 기존_장학금과_합쳐_등록금을_넘으면_거부된다() {
         CurrentUser admin = new CurrentUser(1L, "ADMIN");
         TuitionBill bill = tuitionBill(1L, BigDecimal.valueOf(4_200_000));
-        when(tuitionBillService.getTuitionBillOrThrow(1L)).thenReturn(bill);
+        when(tuitionBillService.getTuitionBillForUpdateOrThrow(1L)).thenReturn(bill);
         Scholarship existing = new Scholarship(1L, ScholarshipType.MERIT, BigDecimal.valueOf(2_000_000), "기존", 1L);
         when(scholarshipRepository.findByTuitionBillId(1L)).thenReturn(List.of(existing));
 
@@ -87,7 +87,7 @@ class ScholarshipServiceTest {
     void 합계가_등록금과_정확히_같으면_허용된다() {
         CurrentUser admin = new CurrentUser(1L, "ADMIN");
         TuitionBill bill = tuitionBill(1L, BigDecimal.valueOf(4_200_000));
-        when(tuitionBillService.getTuitionBillOrThrow(1L)).thenReturn(bill);
+        when(tuitionBillService.getTuitionBillForUpdateOrThrow(1L)).thenReturn(bill);
         Scholarship existing = new Scholarship(1L, ScholarshipType.MERIT, BigDecimal.valueOf(2_000_000), "기존", 1L);
         when(scholarshipRepository.findByTuitionBillId(1L)).thenReturn(List.of(existing));
         when(scholarshipRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));

@@ -121,6 +121,15 @@ public class TuitionBillService {
     }
 
     /**
+     * 5.1: 동시 장학금 적용처럼 합계 재계산 후 저장까지 직렬화해야 하는 흐름이 이 행을 잠근 채로 호출한다.
+     * 호출부의 트랜잭션에 그대로 참여하므로(REQUIRED), 호출부가 이미 @Transactional이어야 락이 유지된다.
+     */
+    public TuitionBill getTuitionBillForUpdateOrThrow(Long tuitionBillId) {
+        return tuitionBillRepository.findByIdForUpdate(tuitionBillId)
+                .orElseThrow(() -> new TuitionBillNotFoundException("해당 등록금 고지를 찾을 수 없습니다."));
+    }
+
+    /**
      * SCRUM-112 - 다른 도메인(payment 등)이 고지 상태를 바꿔야 할 때 이 공개 메서드를 거친다(B1번 패키지 경계).
      */
     @Transactional

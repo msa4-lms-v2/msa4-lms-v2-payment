@@ -24,9 +24,10 @@ public class ScholarshipService {
     private final ScholarshipRepository scholarshipRepository;
     private final TuitionBillService tuitionBillService;
 
+    // 5.1: 동시에 여러 장학금이 적용될 때 합계 초과를 놓치지 않도록 고지 행을 잠근 뒤 합계를 다시 계산한다.
     @Transactional
     public ScholarshipResponseDTO applyScholarshipDiscount(CurrentUser currentUser, ScholarshipDiscountRequestDTO request) {
-        TuitionBill tuitionBill = tuitionBillService.getTuitionBillOrThrow(request.tuitionBillId());
+        TuitionBill tuitionBill = tuitionBillService.getTuitionBillForUpdateOrThrow(request.tuitionBillId());
 
         BigDecimal existingTotal = scholarshipRepository.findByTuitionBillId(tuitionBill.getId()).stream()
                 .map(Scholarship::getAmount)
