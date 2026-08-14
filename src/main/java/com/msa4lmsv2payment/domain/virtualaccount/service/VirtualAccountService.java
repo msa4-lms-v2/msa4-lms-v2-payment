@@ -8,8 +8,6 @@ import com.msa4lmsv2payment.global.error.VirtualAccountNotFoundException;
 import com.msa4lmsv2payment.domain.virtualaccount.repository.VirtualAccountRepository;
 import com.msa4lmsv2payment.domain.virtualaccount.request.VirtualAccountIssueRequestDTO;
 import com.msa4lmsv2payment.domain.virtualaccount.response.VirtualAccountResponseDTO;
-import com.msa4lmsv2payment.global.audit.AuditAction;
-import com.msa4lmsv2payment.global.audit.AuditLogRecorder;
 import com.msa4lmsv2payment.global.client.TossPaymentsClient;
 import com.msa4lmsv2payment.global.client.TossVirtualAccountIssueResponse;
 import com.msa4lmsv2payment.global.security.CurrentUser;
@@ -19,7 +17,6 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -33,10 +30,11 @@ public class VirtualAccountService {
     private final VirtualAccountRepository virtualAccountRepository;
     private final TuitionBillService tuitionBillService;
     private final TossPaymentsClient tossPaymentsClient;
-    private final AuditLogRecorder auditLogRecorder;
+    private final VirtualAccountRecorder virtualAccountRecorder;
 
     // SCRUM-55: 가상계좌 발급 (7-4절 - 입금 Webhook 없이 발급 자체만 완결)
     // Toss 호출 동안 DB 커넥션을 붙잡지 않도록 트랜잭션 밖에서 실행한다(B3번).
+    // 저장과 감사 로그는 virtualAccountRecorder가 하나의 트랜잭션으로 묶는다(4.6).
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public VirtualAccountResponseDTO issueVirtualAccount(CurrentUser currentUser, VirtualAccountIssueRequestDTO request) {
         TuitionBill tuitionBill = tuitionBillService.getOwnedTuitionBillOrThrow(currentUser, request.tuitionBillId());
@@ -45,18 +43,15 @@ public class VirtualAccountService {
         TossVirtualAccountIssueResponse tossResponse = tossPaymentsClient.issueVirtualAccount(
                 orderId, "등록금 납부", tuitionBill.getBillingAmount(), request.customerName(), request.bankCode());
 
-        VirtualAccount virtualAccount = virtualAccountRepository.save(new VirtualAccount(
+        VirtualAccount virtualAccount = new VirtualAccount(
                 tuitionBill.getId(),
                 tossResponse.virtualAccount().accountNumber(),
                 tossResponse.virtualAccount().bankCode(),
                 LocalDateTime.now().plusHours(DEFAULT_VALID_HOURS),
                 VirtualAccountStatus.ISSUED
-        ));
+        );
 
-        auditLogRecorder.record(currentUser.id(), AuditAction.VIRTUAL_ACCOUNT_ISSUED, "VIRTUAL_ACCOUNT", virtualAccount.getId(),
-                Map.of("tuitionBillId", tuitionBill.getId(), "accountNumber", virtualAccount.getAccountNumber()), null);
-
-        return VirtualAccountResponseDTO.from(virtualAccount);
+        return VirtualAccountResponseDTO.from(virtualAccountRecorder.saveWithAudit(currentUser.id(), virtualAccount));
     }
 
     /**

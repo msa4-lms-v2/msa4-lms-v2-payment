@@ -7,7 +7,6 @@ import com.msa4lmsv2payment.domain.virtualaccount.entity.VirtualAccount;
 import com.msa4lmsv2payment.global.error.VirtualAccountNotFoundException;
 import com.msa4lmsv2payment.domain.virtualaccount.repository.VirtualAccountRepository;
 import com.msa4lmsv2payment.domain.virtualaccount.request.VirtualAccountIssueRequestDTO;
-import com.msa4lmsv2payment.global.audit.AuditLogRecorder;
 import com.msa4lmsv2payment.global.client.TossPaymentsClient;
 import com.msa4lmsv2payment.global.client.TossVirtualAccountIssueResponse;
 import com.msa4lmsv2payment.global.security.CurrentUser;
@@ -38,7 +37,7 @@ class VirtualAccountServiceTest {
     @Mock
     private TossPaymentsClient tossPaymentsClient;
     @Mock
-    private AuditLogRecorder auditLogRecorder;
+    private VirtualAccountRecorder virtualAccountRecorder;
 
     @InjectMocks
     private VirtualAccountService virtualAccountService;
@@ -64,7 +63,7 @@ class VirtualAccountServiceTest {
         when(tossPaymentsClient.issueVirtualAccount(anyString(), anyString(), any(), anyString(), anyString()))
                 .thenReturn(new TossVirtualAccountIssueResponse(
                         new TossVirtualAccountIssueResponse.VirtualAccountInfo("X1234567890", "020", "2026-09-08T00:00:00")));
-        when(virtualAccountRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(virtualAccountRecorder.saveWithAudit(any(), any())).thenAnswer(inv -> inv.getArgument(1));
 
         var result = virtualAccountService.issueVirtualAccount(admin, new VirtualAccountIssueRequestDTO(1L, "020", "홍길동"));
 

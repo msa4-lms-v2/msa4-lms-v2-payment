@@ -8,7 +8,6 @@ import com.msa4lmsv2payment.domain.tuitionbill.repository.TuitionBillQueryReposi
 import com.msa4lmsv2payment.domain.tuitionbill.repository.TuitionBillRepository;
 import com.msa4lmsv2payment.domain.tuitionbill.request.TuitionBillCreateRequestDTO;
 import com.msa4lmsv2payment.domain.tuitionbill.response.TuitionBillResponseDTO;
-import com.msa4lmsv2payment.global.audit.AuditLogRecorder;
 import com.msa4lmsv2payment.global.client.AcademicClient;
 import com.msa4lmsv2payment.global.client.AcademicStudentExistsResponse;
 import com.msa4lmsv2payment.global.client.AcademicStudentResponse;
@@ -43,7 +42,7 @@ class TuitionBillServiceTest {
     @Mock
     private AcademicClient academicClient;
     @Mock
-    private AuditLogRecorder auditLogRecorder;
+    private TuitionBillRecorder tuitionBillRecorder;
 
     @InjectMocks
     private TuitionBillService tuitionBillService;
@@ -138,6 +137,7 @@ class TuitionBillServiceTest {
     void 등록금_고지_생성은_학생과_학기_존재를_Academic에_확인한다() {
         CurrentUser admin = new CurrentUser(1L, "ADMIN");
         when(academicClient.findStudent(20260001L)).thenReturn(new AcademicStudentExistsResponse(20260001L, "ENROLLED"));
+        when(tuitionBillRecorder.saveWithAudit(any(), any())).thenAnswer(inv -> inv.getArgument(1));
 
         var request = new TuitionBillCreateRequestDTO(20260001L, 5L, BigDecimal.valueOf(4_500_000), LocalDate.of(2026, 9, 15));
         var result = tuitionBillService.createTuitionBill(admin, request);

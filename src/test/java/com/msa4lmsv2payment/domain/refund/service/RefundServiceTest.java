@@ -18,7 +18,6 @@ import com.msa4lmsv2payment.domain.tuitionbill.service.TuitionBillService;
 import com.msa4lmsv2payment.domain.virtualaccount.entity.VirtualAccount;
 import com.msa4lmsv2payment.domain.virtualaccount.entity.VirtualAccountStatus;
 import com.msa4lmsv2payment.domain.virtualaccount.service.VirtualAccountService;
-import com.msa4lmsv2payment.global.audit.AuditLogRecorder;
 import com.msa4lmsv2payment.global.client.AcademicClient;
 import com.msa4lmsv2payment.global.client.AcademicSemesterResponse;
 import com.msa4lmsv2payment.global.client.AcademicWithdrawalHistoryResponse;
@@ -51,7 +50,7 @@ class RefundServiceTest {
     @Mock
     private AcademicClient academicClient;
     @Mock
-    private AuditLogRecorder auditLogRecorder;
+    private RefundRecorder refundRecorder;
 
     @InjectMocks
     private RefundService refundService;
@@ -106,8 +105,9 @@ class RefundServiceTest {
         when(academicClient.findSemester(5L))
                 .thenReturn(new AcademicSemesterResponse(5L, "SECOND", true, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 12, 18)));
         when(refundRepository.findByTuitionBillIdAndRefundType(1L, RefundType.WITHDRAWAL)).thenReturn(Optional.empty());
-        when(refundRepository.save(org.mockito.ArgumentMatchers.any()))
-                .thenAnswer(inv -> inv.getArgument(0));
+        when(refundRecorder.saveRateApplied(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(inv -> inv.getArgument(1));
 
         RefundResponseDTO result = refundService.applyWithdrawalRefundRate(admin, new WithdrawalRefundRateRequestDTO(1L));
 
@@ -129,7 +129,9 @@ class RefundServiceTest {
         Refund existing = new Refund(1L, RefundType.WITHDRAWAL, BigDecimal.ZERO, BigDecimal.ZERO, RefundStatus.REQUESTED);
         setField(existing, "id", 10L);
         when(refundRepository.findByTuitionBillIdAndRefundType(1L, RefundType.WITHDRAWAL)).thenReturn(Optional.of(existing));
-        when(refundRepository.save(org.mockito.ArgumentMatchers.any())).thenAnswer(inv -> inv.getArgument(0));
+        when(refundRecorder.saveRateApplied(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(inv -> inv.getArgument(1));
 
         RefundResponseDTO result = refundService.applyWithdrawalRefundRate(admin, new WithdrawalRefundRateRequestDTO(1L));
 
@@ -177,7 +179,8 @@ class RefundServiceTest {
         Refund existing = new Refund(1L, RefundType.WITHDRAWAL, BigDecimal.valueOf(3_499_860), new BigDecimal("0.8333"), RefundStatus.FAILED);
         setField(existing, "retryCount", 1);
         when(refundRepository.findByTuitionBillIdAndRefundType(1L, RefundType.WITHDRAWAL)).thenReturn(Optional.of(existing));
-        when(refundRepository.save(org.mockito.ArgumentMatchers.any())).thenAnswer(inv -> inv.getArgument(0));
+        when(refundRecorder.saveRetried(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(inv -> inv.getArgument(1));
 
         RefundResponseDTO result = refundService.retryFailedRefund(admin, new RefundRetryRequestDTO(1L));
 

@@ -17,8 +17,6 @@ import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBill;
 import com.msa4lmsv2payment.domain.tuitionbill.service.TuitionBillService;
 import com.msa4lmsv2payment.domain.virtualaccount.entity.VirtualAccount;
 import com.msa4lmsv2payment.domain.virtualaccount.service.VirtualAccountService;
-import com.msa4lmsv2payment.global.audit.AuditAction;
-import com.msa4lmsv2payment.global.audit.AuditLogRecorder;
 import com.msa4lmsv2payment.global.client.AcademicClient;
 import com.msa4lmsv2payment.global.client.AcademicSemesterResponse;
 import com.msa4lmsv2payment.global.client.AcademicWithdrawalHistoryResponse;
@@ -29,7 +27,6 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -43,7 +40,7 @@ public class RefundService {
     private final VirtualAccountService virtualAccountService;
     private final AcademicClient academicClient;
     private final WithdrawalRefundRateCalculator withdrawalRefundRateCalculator;
-    private final AuditLogRecorder auditLogRecorder;
+    private final RefundRecorder refundRecorder;
 
     // SCRUM-63: 자퇴 예상 환불금 조회 (조회만, 저장 없음)
     // resolveWithdrawalRefundRate가 Academic을 호출해 트랜잭션 밖에서 실행한다(B3번) - applyWithdrawalRefundRate(166)와
@@ -73,10 +70,7 @@ public class RefundService {
             throw new RefundNotRetryableException("완료된 환불 금액과 환불률은 변경할 수 없습니다.");
         }
         refund.updateRate(amount, rate);
-        refund = refundRepository.save(refund);
-
-        auditLogRecorder.record(currentUser.id(), AuditAction.REFUND_REQUESTED, "REFUND", refund.getId(),
-                Map.of("tuitionBillId", tuitionBill.getId(), "amount", amount, "refundRate", rate), null);
+        refund = refundRecorder.saveRateApplied(currentUser.id(), refund, tuitionBill.getId(), amount, rate);
 
         return RefundResponseDTO.from(refund);
     }
@@ -114,10 +108,7 @@ public class RefundService {
         }
 
         refund.retry();
-        refund = refundRepository.save(refund);
-
-        auditLogRecorder.record(currentUser.id(), AuditAction.REFUND_RETRIED, "REFUND", refund.getId(),
-                Map.of("retryCount", refund.getRetryCount()), null);
+        refund = refundRecorder.saveRetried(currentUser.id(), refund);
 
         return RefundResponseDTO.from(refund);
     }
