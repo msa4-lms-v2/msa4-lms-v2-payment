@@ -116,7 +116,7 @@ class PaymentServiceTest {
 
         var result = paymentService.createCheckoutSession(student, new CheckoutSessionRequestDTO(1L, PaymentMethod.CARD, null));
 
-        assertThat(result.orderId()).isEqualTo("PAY-7");
+        assertThat(result.orderId()).isEqualTo("PAYMENT-7");
         assertThat(result.amount()).isEqualByComparingTo(BigDecimal.valueOf(4_200_000));
     }
 
@@ -150,12 +150,12 @@ class PaymentServiceTest {
         setField(payment, "id", 7L);
         when(paymentRepository.findById(7L)).thenReturn(Optional.of(payment));
         when(tuitionBillService.getOwnedTuitionBillOrThrow(student, 1L)).thenReturn(tuitionBill(1L, BigDecimal.valueOf(4_200_000)));
-        when(tossPaymentsClient.confirmPayment("pk_test", "PAY-7", BigDecimal.valueOf(4_200_000), "idem-1"))
-                .thenReturn(new TossPaymentResponse("pk_test", "PAY-7", "DONE", 4_200_000L));
+        when(tossPaymentsClient.confirmPayment("pk_test", "PAYMENT-7", BigDecimal.valueOf(4_200_000), "idem-1"))
+                .thenReturn(new TossPaymentResponse("pk_test", "PAYMENT-7", "DONE", 4_200_000L));
         when(paymentResultRecorder.saveWithAudit(eq(1L), any(), eq("DONE"))).thenAnswer(inv -> inv.getArgument(1));
 
         var result = paymentService.requestPgPayment(student,
-                new PgPaymentRequestDTO("PAY-7", "pk_test", BigDecimal.valueOf(4_200_000)), "idem-1");
+                new PgPaymentRequestDTO("PAYMENT-7", "pk_test", BigDecimal.valueOf(4_200_000)), "idem-1");
 
         assertThat(result.status()).isEqualTo(PaymentStatus.SUCCEEDED);
         assertThat(result.pgTransactionId()).isEqualTo("pk_test");
@@ -169,11 +169,11 @@ class PaymentServiceTest {
         setField(payment, "id", 7L);
         when(paymentRepository.findById(7L)).thenReturn(Optional.of(payment));
         when(tuitionBillService.getOwnedTuitionBillOrThrow(student, 1L)).thenReturn(tuitionBill(1L, BigDecimal.valueOf(4_200_000)));
-        when(tossPaymentsClient.confirmPayment("pk_test", "PAY-7", BigDecimal.valueOf(750_000), "idem-1"))
-                .thenReturn(new TossPaymentResponse("pk_test", "PAY-7", "DONE", 750_000L));
+        when(tossPaymentsClient.confirmPayment("pk_test", "PAYMENT-7", BigDecimal.valueOf(750_000), "idem-1"))
+                .thenReturn(new TossPaymentResponse("pk_test", "PAYMENT-7", "DONE", 750_000L));
         when(paymentResultRecorder.saveWithAudit(eq(1L), any(), eq("DONE"))).thenAnswer(inv -> inv.getArgument(1));
 
-        paymentService.requestPgPayment(student, new PgPaymentRequestDTO("PAY-7", "pk_test", BigDecimal.valueOf(750_000)), "idem-1");
+        paymentService.requestPgPayment(student, new PgPaymentRequestDTO("PAYMENT-7", "pk_test", BigDecimal.valueOf(750_000)), "idem-1");
 
         org.mockito.Mockito.verify(installmentPlanService).markItemPaid(101L, 7L);
     }
@@ -185,12 +185,12 @@ class PaymentServiceTest {
         setField(payment, "id", 7L);
         when(paymentRepository.findById(7L)).thenReturn(Optional.of(payment));
         when(tuitionBillService.getOwnedTuitionBillOrThrow(student, 1L)).thenReturn(tuitionBill(1L, BigDecimal.valueOf(4_200_000)));
-        when(tossPaymentsClient.confirmPayment("pk_test", "PAY-7", BigDecimal.valueOf(4_200_000), "idem-1"))
-                .thenReturn(new TossPaymentResponse("pk_test", "PAY-7", "ABORTED", 4_200_000L));
+        when(tossPaymentsClient.confirmPayment("pk_test", "PAYMENT-7", BigDecimal.valueOf(4_200_000), "idem-1"))
+                .thenReturn(new TossPaymentResponse("pk_test", "PAYMENT-7", "ABORTED", 4_200_000L));
         when(paymentResultRecorder.saveWithAudit(eq(1L), any(), eq("ABORTED"))).thenAnswer(inv -> inv.getArgument(1));
 
         var result = paymentService.requestPgPayment(student,
-                new PgPaymentRequestDTO("PAY-7", "pk_test", BigDecimal.valueOf(4_200_000)), "idem-1");
+                new PgPaymentRequestDTO("PAYMENT-7", "pk_test", BigDecimal.valueOf(4_200_000)), "idem-1");
 
         assertThat(result.status()).isEqualTo(PaymentStatus.FAILED);
     }
@@ -204,7 +204,7 @@ class PaymentServiceTest {
         when(tuitionBillService.getOwnedTuitionBillOrThrow(student, 1L)).thenReturn(tuitionBill(1L, BigDecimal.valueOf(4_200_000)));
 
         assertThatThrownBy(() -> paymentService.requestPgPayment(student,
-                new PgPaymentRequestDTO("PAY-7", "pk_test", BigDecimal.valueOf(1_000)), "idem-1"))
+                new PgPaymentRequestDTO("PAYMENT-7", "pk_test", BigDecimal.valueOf(1_000)), "idem-1"))
                 .isInstanceOf(PaymentAmountMismatchException.class);
     }
 
@@ -214,7 +214,7 @@ class PaymentServiceTest {
         when(paymentRepository.findById(999L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> paymentService.requestPgPayment(student,
-                new PgPaymentRequestDTO("PAY-999", "pk_test", BigDecimal.valueOf(1_000)), "idem-1"))
+                new PgPaymentRequestDTO("PAYMENT-999", "pk_test", BigDecimal.valueOf(1_000)), "idem-1"))
                 .isInstanceOf(PaymentNotFoundException.class);
     }
 
@@ -226,7 +226,7 @@ class PaymentServiceTest {
         setField(payment, "id", 7L);
         when(paymentRepository.findById(7L)).thenReturn(Optional.of(payment));
         when(tossPaymentsClient.getPayment("pk_test"))
-                .thenReturn(new TossPaymentResponse("pk_test", "PAY-7", "DONE", 4_200_000L));
+                .thenReturn(new TossPaymentResponse("pk_test", "PAYMENT-7", "DONE", 4_200_000L));
         when(paymentResultRecorder.saveWithAudit(eq(1L), any(), eq("DONE"))).thenAnswer(inv -> inv.getArgument(1));
 
         var result = paymentService.syncPaymentResult(admin, 7L, new PaymentResultSyncRequestDTO("pk_test"));
@@ -241,7 +241,7 @@ class PaymentServiceTest {
         setField(payment, "id", 7L);
         when(paymentRepository.findById(7L)).thenReturn(Optional.of(payment));
         when(tossPaymentsClient.getPayment("pk_test"))
-                .thenReturn(new TossPaymentResponse("pk_test", "PAY-999", "DONE", 4_200_000L));
+                .thenReturn(new TossPaymentResponse("pk_test", "PAYMENT-999", "DONE", 4_200_000L));
 
         assertThatThrownBy(() -> paymentService.syncPaymentResult(
                 admin, 7L, new PaymentResultSyncRequestDTO("pk_test")))
@@ -258,7 +258,7 @@ class PaymentServiceTest {
         payment.succeed("pk_test");
         when(paymentRepository.findById(7L)).thenReturn(Optional.of(payment));
         when(tossPaymentsClient.getPayment("pk_test"))
-                .thenReturn(new TossPaymentResponse("pk_test", "PAY-7", "ABORTED", 4_200_000L));
+                .thenReturn(new TossPaymentResponse("pk_test", "PAYMENT-7", "ABORTED", 4_200_000L));
 
         assertThatThrownBy(() -> paymentService.syncPaymentResult(
                 admin, 7L, new PaymentResultSyncRequestDTO("pk_test")))

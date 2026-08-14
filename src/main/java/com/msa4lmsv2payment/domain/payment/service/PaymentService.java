@@ -39,7 +39,8 @@ import java.math.BigDecimal;
 @Transactional(readOnly = true)
 public class PaymentService {
 
-    private static final String ORDER_ID_PREFIX = "PAY-";
+    // 토스페이먼츠 orderId 규칙(영문/숫자/-/_, 6~64자)을 항상 만족하도록 자리수가 작은 초기 결제 ID에서도 6자 미만이 되지 않는 접두어를 쓴다.
+    private static final String ORDER_ID_PREFIX = "PAYMENT-";
 
     private final PaymentRepository paymentRepository;
     private final TuitionBillService tuitionBillService;
