@@ -143,3 +143,71 @@ ALTER TABLE refunds ADD CONSTRAINT uk_refunds_tuition_bill_type UNIQUE (tuition_
 
 -- refund_rate는 0~1 사이 비율인데 계산 로직 버그로 음수·1 초과값이 저장될 여지를 DB 레벨에서 막는다.
 ALTER TABLE refunds ADD CONSTRAINT chk_refunds_rate CHECK (refund_rate BETWEEN 0 AND 1);
+
+-- 2026-08-15: 분할납부(installment) - 등록금 고지 1건을 회차별로 나눠 결제할 수 있게 계획을 저장한다.
+-- payments.installment_plan_item_id로 어느 회차의 결제인지 연결하고, 회차 금액은 항상 서버가 계산해 위조를 막는다(기존 payment-amount-validation과 동일 원칙).
+-- 신청만으로는 분할납부를 시작할 수 없다 - ADMIN이 승인(REQUESTED -> ACTIVE)해야 회차 결제가 가능하다.
+CREATE TABLE IF NOT EXISTS installment_plans (
+    id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+    tuition_bill_id BIGINT NOT NULL,
+    total_rounds    INT NOT NULL,
+    status          VARCHAR(20) NOT NULL COMMENT 'REQUESTED, ACTIVE, REJECTED, COMPLETED',
+    reviewed_by     BIGINT COMMENT 'Academic.users.id 참조, FK 아님',
+    reviewed_at     DATETIME,
+    reject_reason   VARCHAR(255),
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_installment_plans_tuition_bill_id (tuition_bill_id),
+    CONSTRAINT fk_installment_plans_tuition_bill FOREIGN KEY (tuition_bill_id) REFERENCES tuition_bills (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS installment_plan_items (
+    id                   BIGINT AUTO_INCREMENT PRIMARY KEY,
+    installment_plan_id  BIGINT NOT NULL,
+    round_no             INT NOT NULL,
+    amount               DECIMAL(12, 0) NOT NULL,
+    due_date             DATE NOT NULL,
+    payment_id           BIGINT COMMENT '이 회차를 결제한 payments.id, 결제 전에는 NULL',
+    status               VARCHAR(20) NOT NULL COMMENT 'SCHEDULED, PAID',
+    UNIQUE KEY uk_installment_plan_items_plan_round (installment_plan_id, round_no),
+    CONSTRAINT fk_installment_plan_items_plan FOREIGN KEY (installment_plan_id) REFERENCES installment_plans (id),
+    CONSTRAINT fk_installment_plan_items_payment FOREIGN KEY (payment_id) REFERENCES payments (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ERD 리뷰(2026-08-10)는 결제 1건이 서로 다른 두 회차의 완납 처리에 쓰이지 않도록 UNIQUE를 권고했지만,
+-- 이 컬럼에 그대로 걸면 결제 실패·방치 후 같은 회차를 다시 결제하려는 정상 재시도까지 DB 제약 위반으로 막힌다
+-- (일반 전액결제도 같은 이유로 tuition_bill_id에 UNIQUE를 걸지 않는다). 대신 InstallmentPlanService.getItemOrThrow가
+-- 이미 PAID인 회차의 신규 체크아웃 세션 생성을 막고, 기존 TuitionOverpaymentGuard가 합계 기준 이중 청구를 막는다.
+ALTER TABLE payments ADD COLUMN installment_plan_item_id BIGINT COMMENT '분할납부 회차 결제일 때만 채워짐, installment_plan_items.id 참조';
+ALTER TABLE payments ADD CONSTRAINT fk_payments_installment_plan_item FOREIGN KEY (installment_plan_item_id) REFERENCES installment_plan_items (id);
+
+-- 2026-08-15: 장학금 신청(student-initiated) - 기존 scholarships/scholarship-discounts는 관리자가 배분을 확정하는 API만 있어,
+-- 학생이 직접 신청을 접수하는 절차와 그 승인 이력을 별도로 남긴다. 승인되면 이 신청을 근거로 scholarships 행이 생성된다.
+CREATE TABLE IF NOT EXISTS scholarship_application_periods (
+    id                   BIGINT AUTO_INCREMENT PRIMARY KEY,
+    semester_id          BIGINT NOT NULL COMMENT 'Academic.semesters.id 참조, FK 아님',
+    start_date           DATE NOT NULL,
+    end_date             DATE NOT NULL,
+    academic_schedule_id BIGINT COMMENT 'Academic.academic_schedules.id 참조, FK 아님. 학사일정 공지와 연결할 때만 채움(선택)',
+    created_by           BIGINT NOT NULL COMMENT 'Academic.users.id 참조, FK 아님',
+    created_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_scholarship_application_periods_semester_id (semester_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS scholarship_applications (
+    id               BIGINT AUTO_INCREMENT PRIMARY KEY,
+    tuition_bill_id  BIGINT NOT NULL,
+    student_id       BIGINT NOT NULL COMMENT 'Academic.students.id 참조, FK 아님',
+    type             VARCHAR(20) NOT NULL COMMENT 'MERIT, NEED_BASED, OTHER (scholarships.type과 동일 체계)',
+    requested_amount DECIMAL(12, 0) NOT NULL,
+    reason           VARCHAR(500) NOT NULL,
+    status           VARCHAR(20) NOT NULL COMMENT 'REQUESTED, APPROVED, REJECTED',
+    reviewed_by      BIGINT COMMENT 'Academic.users.id 참조, FK 아님',
+    reviewed_at      DATETIME,
+    reject_reason    VARCHAR(255),
+    scholarship_id   BIGINT COMMENT '승인 시 생성된 scholarships.id',
+    created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_scholarship_applications_tuition_bill_id (tuition_bill_id),
+    INDEX idx_scholarship_applications_student_id (student_id),
+    CONSTRAINT fk_scholarship_applications_tuition_bill FOREIGN KEY (tuition_bill_id) REFERENCES tuition_bills (id),
+    CONSTRAINT fk_scholarship_applications_scholarship FOREIGN KEY (scholarship_id) REFERENCES scholarships (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -1,5 +1,7 @@
 package com.msa4lmsv2payment.domain.payment.service;
 
+import com.msa4lmsv2payment.domain.installment.entity.InstallmentPlanItem;
+import com.msa4lmsv2payment.domain.installment.service.InstallmentPlanService;
 import com.msa4lmsv2payment.domain.payment.entity.Payment;
 import com.msa4lmsv2payment.domain.payment.entity.PaymentStatus;
 import com.msa4lmsv2payment.global.error.PaymentAmountMismatchException;
@@ -45,6 +47,7 @@ public class PaymentService {
     private final TossPaymentsClient tossPaymentsClient;
     private final PaymentResultRecorder paymentResultRecorder;
     private final TuitionOverpaymentGuard tuitionOverpaymentGuard;
+    private final InstallmentPlanService installmentPlanService;
 
     // SCRUM-51: 결제 금액 검증
     public PaymentAmountValidationResponseDTO validateAmount(CurrentUser currentUser, PaymentAmountValidationRequestDTO request) {
@@ -58,12 +61,22 @@ public class PaymentService {
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public CheckoutSessionResponseDTO createCheckoutSession(CurrentUser currentUser, CheckoutSessionRequestDTO request) {
         TuitionBill tuitionBill = tuitionBillService.getOwnedTuitionBillOrThrow(currentUser, request.tuitionBillId());
-        BigDecimal amount = expectedAmount(currentUser, request.tuitionBillId());
 
-        Payment payment = paymentRepository.save(new Payment(
-                tuitionBill.getId(), tuitionBill.getStudentId(), amount, request.method(), PaymentStatus.REQUESTED));
+        Payment payment;
+        if (request.installmentPlanItemId() != null) {
+            // 분할납부 회차 결제 - 회차 금액은 클라이언트가 지정할 수 없고 서버가 계획에 저장된 금액을 그대로 쓴다(위조 방지).
+            InstallmentPlanItem item = installmentPlanService.getItemOrThrow(tuitionBill.getId(), request.installmentPlanItemId());
+            payment = paymentRepository.save(new Payment(
+                    tuitionBill.getId(), tuitionBill.getStudentId(), item.getAmount(), request.method(),
+                    PaymentStatus.REQUESTED, item.getId()));
+            installmentPlanService.assignPaymentToItem(item.getId(), payment.getId());
+        } else {
+            BigDecimal amount = expectedAmount(currentUser, request.tuitionBillId());
+            payment = paymentRepository.save(new Payment(
+                    tuitionBill.getId(), tuitionBill.getStudentId(), amount, request.method(), PaymentStatus.REQUESTED));
+        }
 
-        return new CheckoutSessionResponseDTO(payment.getId(), ORDER_ID_PREFIX + payment.getId(), "등록금 납부", amount);
+        return new CheckoutSessionResponseDTO(payment.getId(), ORDER_ID_PREFIX + payment.getId(), "등록금 납부", payment.getAmount());
     }
 
     // SCRUM-115: PG 결제 요청 - 51을 내부 재사용해 위조 금액을 거른 뒤 토스 confirm을 호출하고, 결과를 그 자리에서 저장한다(110 역할 포함).
@@ -106,7 +119,12 @@ public class PaymentService {
         } else {
             payment.fail();
         }
-        return PaymentResponseDTO.from(paymentResultRecorder.saveWithAudit(actorId, payment, tossResponse.status()));
+        Payment saved = paymentResultRecorder.saveWithAudit(actorId, payment, tossResponse.status());
+        // 회차 완료 처리는 결제 저장과 별도 트랜잭션이다(recalculateTuitionStatus와 동일하게 클라이언트가 이어서 호출하는 흐름을 따름).
+        if (saved.isSucceeded()) {
+            installmentPlanService.markItemPaid(saved.getInstallmentPlanItemId(), saved.getId());
+        }
+        return PaymentResponseDTO.from(saved);
     }
 
     private void validateTossResponse(Payment payment, TossPaymentResponse response,
