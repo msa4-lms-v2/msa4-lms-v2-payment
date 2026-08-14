@@ -65,6 +65,16 @@ public class IdempotencyKey {
         this.status = IdempotencyKeyStatus.COMPLETED;
     }
 
+    public void fail(String responseSnapshot) {
+        this.responseSnapshot = responseSnapshot;
+        this.status = IdempotencyKeyStatus.FAILED;
+    }
+
+    public void requireReconciliation(String responseSnapshot) {
+        this.responseSnapshot = responseSnapshot;
+        this.status = IdempotencyKeyStatus.RECONCILIATION_REQUIRED;
+    }
+
     public void restart(LocalDateTime expiresAt) {
         this.responseSnapshot = null;
         this.status = IdempotencyKeyStatus.IN_PROGRESS;

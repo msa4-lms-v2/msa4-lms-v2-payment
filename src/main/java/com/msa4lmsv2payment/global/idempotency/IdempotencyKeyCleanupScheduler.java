@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * idempotency_keys는 물리 삭제 대상 테이블(ERD 1절)인데 만료된 행을 지우는 경로가 없어 무한정 쌓이고 있었다.
@@ -20,12 +21,16 @@ public class IdempotencyKeyCleanupScheduler {
 
     private final IdempotencyKeyRepository idempotencyKeyRepository;
 
-    @Scheduled(cron = "0 0 4 * * *")
+    @Scheduled(cron = "0 * * * * *")
     @Transactional
-    public void cleanupExpiredKeys() {
-        long deleted = idempotencyKeyRepository.deleteByExpiresAtBefore(LocalDateTime.now());
-        if (deleted > 0) {
-            log.info("만료된 idempotency_keys {}건 정리", deleted);
+    public void recoverExpiredKeys() {
+        List<IdempotencyKey> expiredKeys = idempotencyKeyRepository.findByStatusAndExpiresAtBefore(
+                IdempotencyKeyStatus.IN_PROGRESS, LocalDateTime.now());
+        for (IdempotencyKey key : expiredKeys) {
+            key.fail("{\"error\": \"TIMEOUT\", \"message\": \"처리 중 타임아웃되었습니다.\"}");
+        }
+        if (!expiredKeys.isEmpty()) {
+            log.info("만료된 IN_PROGRESS 멱등키 {}건 FAILED 처리", expiredKeys.size());
         }
     }
 }

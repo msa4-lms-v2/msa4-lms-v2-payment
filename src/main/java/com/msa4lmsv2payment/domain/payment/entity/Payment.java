@@ -39,6 +39,7 @@ public class Payment {
     @Enumerated(EnumType.STRING)
     private PaymentMethod method;
 
+    @Column(unique = true)
     private String pgTransactionId;
 
     @Enumerated(EnumType.STRING)
