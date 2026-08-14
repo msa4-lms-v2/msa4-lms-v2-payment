@@ -79,7 +79,7 @@ class IdempotencyServiceTest {
         idempotencyService = service();
 
         assertThatThrownBy(() -> idempotencyService.verifyAndReserve(
-                "a".repeat(101), 1L, "/api/payment/pg-requests", "body", String.class))
+                "a".repeat(101), 1L, "/api/payment/payments/confirm", "body", String.class))
                 .isInstanceOf(IdempotencyKeyConflictException.class);
     }
 

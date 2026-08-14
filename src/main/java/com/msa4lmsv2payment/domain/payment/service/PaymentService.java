@@ -82,10 +82,11 @@ public class PaymentService {
 
     // SCRUM-110: 결제 성공·실패 처리 - confirm 호출이 타임아웃됐을 때 ADMIN이 토스 실제 상태로 DB를 동기화하는 복구용.
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    public PaymentResponseDTO syncPaymentResult(CurrentUser admin, PaymentResultSyncRequestDTO request) {
-        Payment payment = findByOrderIdOrThrow(request.orderId());
+    public PaymentResponseDTO syncPaymentResult(CurrentUser admin, Long paymentId, PaymentResultSyncRequestDTO request) {
+        Payment payment = paymentRepository.findById(paymentId)
+                .orElseThrow(() -> new PaymentNotFoundException("결제 세션을 찾을 수 없습니다: " + paymentId));
         TossPaymentResponse tossResponse = tossPaymentsClient.getPayment(request.paymentKey());
-        return applyPaymentResult(admin.id(), payment, tossResponse, request.orderId(), request.paymentKey());
+        return applyPaymentResult(admin.id(), payment, tossResponse, ORDER_ID_PREFIX + payment.getId(), request.paymentKey());
     }
 
     private PaymentResponseDTO applyPaymentResult(Long actorId, Payment payment, TossPaymentResponse tossResponse,
