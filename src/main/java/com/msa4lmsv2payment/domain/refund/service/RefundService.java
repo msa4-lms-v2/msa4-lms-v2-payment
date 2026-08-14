@@ -7,6 +7,7 @@ import com.msa4lmsv2payment.domain.refund.entity.RefundType;
 import com.msa4lmsv2payment.global.error.RefundNotFoundException;
 import com.msa4lmsv2payment.global.error.RefundNotRetryableException;
 import com.msa4lmsv2payment.global.error.RefundRetryLimitExceededException;
+import com.msa4lmsv2payment.global.error.TuitionBillAccessDeniedException;
 import com.msa4lmsv2payment.domain.refund.repository.RefundRepository;
 import com.msa4lmsv2payment.domain.refund.request.RefundRetryRequestDTO;
 import com.msa4lmsv2payment.domain.refund.request.VirtualAccountRefundRequestDTO;
@@ -17,9 +18,11 @@ import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBill;
 import com.msa4lmsv2payment.domain.tuitionbill.service.TuitionBillService;
 import com.msa4lmsv2payment.domain.virtualaccount.entity.VirtualAccount;
 import com.msa4lmsv2payment.domain.virtualaccount.service.VirtualAccountService;
+import com.msa4lmsv2payment.domain.payment.repository.PaymentRepository;
 import com.msa4lmsv2payment.global.client.AcademicClient;
 import com.msa4lmsv2payment.global.client.AcademicSemesterResponse;
-import com.msa4lmsv2payment.global.client.AcademicWithdrawalHistoryResponse;
+import com.msa4lmsv2payment.global.client.AcademicWithdrawalResponse;
+import com.msa4lmsv2payment.global.error.WithdrawalNotApprovedException;
 import com.msa4lmsv2payment.global.security.CurrentUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -36,6 +39,7 @@ public class RefundService {
     private static final int MAX_RETRY_ATTEMPTS = 3;
 
     private final RefundRepository refundRepository;
+    private final PaymentRepository paymentRepository;
     private final TuitionBillService tuitionBillService;
     private final VirtualAccountService virtualAccountService;
     private final AcademicClient academicClient;
@@ -46,12 +50,15 @@ public class RefundService {
     // resolveWithdrawalRefundRate가 Academic을 호출해 트랜잭션 밖에서 실행한다(B3번) - applyWithdrawalRefundRate(166)와
     // 같은 private 헬퍼를 쓰면서도 이 조회 경로만 놓쳤던 걸 뒤늦게 발견해 맞췄다.
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    public WithdrawalRefundEstimateResponseDTO estimateWithdrawalRefund(CurrentUser currentUser, Long tuitionBillId) {
+    public WithdrawalRefundEstimateResponseDTO estimateWithdrawalRefund(
+            CurrentUser currentUser, Long tuitionBillId, Long withdrawalId
+    ) {
         TuitionBill tuitionBill = tuitionBillService.getOwnedTuitionBillOrThrow(currentUser, tuitionBillId);
-        BigDecimal rate = resolveWithdrawalRefundRate(tuitionBill);
-        BigDecimal estimatedAmount = tuitionBill.getBillingAmount().multiply(rate);
+        BigDecimal rate = resolveWithdrawalRefundRate(tuitionBill, withdrawalId);
+        BigDecimal refundableBase = refundableBase(tuitionBill.getId());
+        BigDecimal estimatedAmount = refundableBase.multiply(rate);
 
-        return new WithdrawalRefundEstimateResponseDTO(tuitionBill.getId(), tuitionBill.getBillingAmount(), rate, estimatedAmount);
+        return new WithdrawalRefundEstimateResponseDTO(tuitionBill.getId(), refundableBase, rate, estimatedAmount);
     }
 
     // SCRUM-166: 자퇴 처리일 기준 환불률 적용 (동일 고지에 재요청 시 새로 만들지 않고 기존 REQUESTED 건의 비율만 갱신 - 비기능 #19)
@@ -61,18 +68,27 @@ public class RefundService {
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public RefundResponseDTO applyWithdrawalRefundRate(CurrentUser currentUser, WithdrawalRefundRateRequestDTO request) {
         TuitionBill tuitionBill = tuitionBillService.getOwnedTuitionBillOrThrow(currentUser, request.tuitionBillId());
-        BigDecimal rate = resolveWithdrawalRefundRate(tuitionBill);
-        BigDecimal amount = tuitionBill.getBillingAmount().multiply(rate);
+        BigDecimal rate = resolveWithdrawalRefundRate(tuitionBill, request.withdrawalId());
+        BigDecimal refundableBase = refundableBase(tuitionBill.getId());
+        BigDecimal amount = refundableBase.multiply(rate);
 
         Refund refund = refundRepository.findByTuitionBillIdAndRefundType(tuitionBill.getId(), RefundType.WITHDRAWAL)
                 .orElseGet(() -> new Refund(tuitionBill.getId(), RefundType.WITHDRAWAL, amount, rate, RefundStatus.REQUESTED));
         if (refund.getStatus() == RefundStatus.SUCCEEDED) {
             throw new RefundNotRetryableException("완료된 환불 금액과 환불률은 변경할 수 없습니다.");
         }
-        refund.updateRate(amount, rate);
+        refund.updateRate(request.withdrawalId(), amount, rate);
         refund = refundRecorder.saveRateApplied(currentUser.id(), refund, tuitionBill.getId(), amount, rate);
 
         return RefundResponseDTO.from(refund);
+    }
+
+    // 성공 결제 합계에서 성공 환불 합계를 뺀 값만 환불 대상이다(수정사항.md 4.5 확정 공식) - 장학금은 결제 자체가
+    // 아니므로 자동 제외되고, 이미 환불된 금액을 다시 환불 기준액에 포함하지 않는다.
+    private BigDecimal refundableBase(Long tuitionBillId) {
+        BigDecimal succeededPayments = paymentRepository.sumSucceededAmount(tuitionBillId);
+        BigDecimal succeededRefunds = refundRepository.sumSucceededAmount(tuitionBillId);
+        return succeededPayments.subtract(succeededRefunds);
     }
 
     // SCRUM-175: 가상계좌 환불 요청 (55에서 발급한 계좌를 166에서 만든 환불 요청에 연결)
@@ -113,9 +129,15 @@ public class RefundService {
         return RefundResponseDTO.from(refund);
     }
 
-    private BigDecimal resolveWithdrawalRefundRate(TuitionBill tuitionBill) {
-        AcademicWithdrawalHistoryResponse history = academicClient.findLatestWithdrawalHistory(tuitionBill.getStudentId());
+    private BigDecimal resolveWithdrawalRefundRate(TuitionBill tuitionBill, Long withdrawalId) {
+        AcademicWithdrawalResponse withdrawal = academicClient.findWithdrawal(withdrawalId);
+        if (!withdrawal.studentId().equals(tuitionBill.getStudentId())) {
+            throw new TuitionBillAccessDeniedException("본인의 자퇴 신청이 아닙니다.");
+        }
+        if (!"APPROVED".equals(withdrawal.status()) || withdrawal.effectiveDate() == null) {
+            throw new WithdrawalNotApprovedException("승인되어 효력일이 확정된 자퇴 신청만 환불을 계산할 수 있습니다.");
+        }
         AcademicSemesterResponse semester = academicClient.findSemester(tuitionBill.getSemesterId());
-        return withdrawalRefundRateCalculator.calculate(history.processedAt(), semester.startDate(), semester.endDate());
+        return withdrawalRefundRateCalculator.calculate(withdrawal.effectiveDate(), semester.startDate(), semester.endDate());
     }
 }

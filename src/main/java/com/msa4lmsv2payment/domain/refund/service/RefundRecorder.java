@@ -25,7 +25,9 @@ public class RefundRecorder {
     public Refund saveRateApplied(Long actorId, Refund refund, Long tuitionBillId, BigDecimal amount, BigDecimal rate) {
         Refund saved = refundRepository.save(refund);
         auditLogRecorder.record(actorId, AuditAction.REFUND_REQUESTED, "REFUND", saved.getId(),
-                Map.of("tuitionBillId", tuitionBillId, "amount", amount, "refundRate", rate), null);
+                Map.of("tuitionBillId", tuitionBillId, "withdrawalId", saved.getWithdrawalId(),
+                        "amount", amount, "refundRate", rate),
+                null);
         return saved;
     }
 

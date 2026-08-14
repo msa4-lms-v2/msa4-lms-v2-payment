@@ -36,6 +36,8 @@ public class Refund {
 
     private Long tuitionBillId;
 
+    private Long withdrawalId;
+
     @Enumerated(EnumType.STRING)
     private RefundType refundType;
 
@@ -61,10 +63,11 @@ public class Refund {
         this.status = status;
     }
 
-    public void updateRate(BigDecimal amount, BigDecimal refundRate) {
+    public void updateRate(Long withdrawalId, BigDecimal amount, BigDecimal refundRate) {
         if (status == RefundStatus.SUCCEEDED) {
             throw new IllegalStateException("완료된 환불 금액과 환불률은 변경할 수 없습니다.");
         }
+        this.withdrawalId = withdrawalId;
         this.amount = amount;
         this.refundRate = refundRate;
     }

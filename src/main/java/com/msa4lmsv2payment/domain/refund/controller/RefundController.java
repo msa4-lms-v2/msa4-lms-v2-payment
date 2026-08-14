@@ -55,9 +55,10 @@ public class RefundController {
     @GetMapping("/api/payment/refunds/withdrawal-estimate")
     public GlobalRes<WithdrawalRefundEstimateResponseDTO> getWithdrawalRefundEstimate(
             @AuthenticationPrincipal CurrentUser currentUser,
-            @RequestParam Long tuitionBillId
+            @RequestParam Long tuitionBillId,
+            @RequestParam Long withdrawalId
     ) {
-        return GlobalRes.success(refundService.estimateWithdrawalRefund(currentUser, tuitionBillId));
+        return GlobalRes.success(refundService.estimateWithdrawalRefund(currentUser, tuitionBillId, withdrawalId));
     }
 
     @Operation(summary = "자퇴 처리일 기준 환불률 적용", description = "자퇴 이력과 학기 일정을 Academic에서 조회해 환불률과 금액을 계산하고 REQUESTED 환불로 저장한다. 동일 고지의 미완료 요청은 갱신하지만 SUCCEEDED 환불의 금액과 비율은 변경하지 않는다.")
@@ -83,7 +84,7 @@ public class RefundController {
             @ApiResponse(responseCode = "201", description = "연결 성공 또는 완료된 동일 멱등 요청의 저장 응답 재생",
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = GlobalRes.class),
                             examples = @ExampleObject(name = "환불 연결 성공", value = """
-                                    {"code":"00","message":"SUCCESS","data":{"id":5,"tuitionBillId":1,"refundType":"WITHDRAWAL","amount":3499860,"refundRate":0.8333,"status":"REQUESTED","retryCount":0}}
+                                    {"code":"00","message":"SUCCESS","data":{"id":5,"tuitionBillId":1,"withdrawalId":1,"refundType":"WITHDRAWAL","amount":3499860,"refundRate":0.8333,"status":"REQUESTED","retryCount":0}}
                                     """))),
             @ApiResponse(responseCode = "403", description = "본인 고지가 아님"),
             @ApiResponse(responseCode = "404", ref = OpenApiConfig.NOT_FOUND_RESPONSE_REF),

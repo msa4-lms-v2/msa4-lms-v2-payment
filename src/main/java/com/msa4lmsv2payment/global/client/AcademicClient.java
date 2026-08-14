@@ -22,7 +22,7 @@ public interface AcademicClient {
     AcademicSemesterResponse findSemester(Long semesterId);
 
     /**
-     * 9절 - 자퇴 환불률 산정을 위해 최신 자퇴 처리 이력(처리일)을 조회한다.
+     * 9절 - 자퇴 환불률 산정을 위해 특정 자퇴 신청 건(승인 상태, 효력일)을 조회한다.
      */
-    AcademicWithdrawalHistoryResponse findLatestWithdrawalHistory(Long studentId);
+    AcademicWithdrawalResponse findWithdrawal(Long withdrawalId);
 }

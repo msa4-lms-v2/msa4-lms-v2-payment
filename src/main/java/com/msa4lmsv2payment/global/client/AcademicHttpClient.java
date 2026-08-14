@@ -56,12 +56,10 @@ public class AcademicHttpClient implements AcademicClient {
     }
 
     @Override
-    public AcademicWithdrawalHistoryResponse findLatestWithdrawalHistory(Long studentId) {
-        return get(spec -> spec.uri(uriBuilder -> uriBuilder
-                        .path("/api/academic/students/{studentId}/withdrawals/latest")
-                        .build(studentId)),
-                new ParameterizedTypeReference<InternalApiResponse<AcademicWithdrawalHistoryResponse>>() {},
-                () -> new AcademicResourceNotFoundException("자퇴 처리 이력을 찾을 수 없습니다: studentId=" + studentId));
+    public AcademicWithdrawalResponse findWithdrawal(Long withdrawalId) {
+        return get(spec -> spec.uri("/api/academic/withdrawals/{withdrawalId}", withdrawalId),
+                new ParameterizedTypeReference<InternalApiResponse<AcademicWithdrawalResponse>>() {},
+                () -> new AcademicResourceNotFoundException("자퇴 신청을 찾을 수 없습니다: withdrawalId=" + withdrawalId));
     }
 
     private <T> T get(Function<RestClient.RequestHeadersUriSpec<?>, RestClient.RequestHeadersSpec<?>> uriCustomizer,

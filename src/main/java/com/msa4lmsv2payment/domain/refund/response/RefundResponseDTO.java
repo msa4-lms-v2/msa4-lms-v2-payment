@@ -10,6 +10,7 @@ import java.math.BigDecimal;
 public record RefundResponseDTO(
         @Schema(description = "환불 ID", example = "5") Long id,
         @Schema(description = "등록금 고지 ID", example = "1") Long tuitionBillId,
+        @Schema(description = "Academic 자퇴 신청 ID. WITHDRAWAL 환불에만 값이 있음", example = "1", nullable = true) Long withdrawalId,
         @Schema(description = "환불 유형", allowableValues = {"WITHDRAWAL", "PG_CANCEL", "EXCESS_DEPOSIT"}, example = "WITHDRAWAL") RefundType refundType,
         @Schema(description = "환불 금액", example = "3499860") BigDecimal amount,
         @Schema(description = "적용된 환불률", example = "0.8333") BigDecimal refundRate,
@@ -20,6 +21,7 @@ public record RefundResponseDTO(
         return new RefundResponseDTO(
                 refund.getId(),
                 refund.getTuitionBillId(),
+                refund.getWithdrawalId(),
                 refund.getRefundType(),
                 refund.getAmount(),
                 refund.getRefundRate(),

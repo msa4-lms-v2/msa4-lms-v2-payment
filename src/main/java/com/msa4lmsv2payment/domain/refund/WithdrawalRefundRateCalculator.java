@@ -6,7 +6,6 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 
 /**
@@ -20,15 +19,13 @@ public class WithdrawalRefundRateCalculator {
 
     private final WithdrawalRefundRateProperties properties;
 
-    public BigDecimal calculate(LocalDateTime processedAt, LocalDate semesterStart, LocalDate semesterEnd) {
-        LocalDate processedDate = processedAt.toLocalDate();
-
-        if (processedDate.isBefore(semesterStart)) {
+    public BigDecimal calculate(LocalDate effectiveDate, LocalDate semesterStart, LocalDate semesterEnd) {
+        if (effectiveDate.isBefore(semesterStart)) {
             return properties.rateBeforeStart();
         }
 
         long totalDays = ChronoUnit.DAYS.between(semesterStart, semesterEnd);
-        long elapsedDays = ChronoUnit.DAYS.between(semesterStart, processedDate);
+        long elapsedDays = ChronoUnit.DAYS.between(semesterStart, effectiveDate);
         double ratio = totalDays == 0 ? 1.0 : elapsedDays / (double) totalDays;
 
         if (ratio < 1.0 / 3) {
