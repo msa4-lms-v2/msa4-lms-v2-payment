@@ -6,8 +6,10 @@ import com.msa4lmsv2payment.global.error.ScholarshipExceedsBillingAmountExceptio
 import com.msa4lmsv2payment.domain.scholarship.repository.ScholarshipRepository;
 import com.msa4lmsv2payment.domain.scholarship.request.PaymentScholarshipAllocationRequestDTO;
 import com.msa4lmsv2payment.domain.scholarship.request.ScholarshipDiscountRequestDTO;
+import com.msa4lmsv2payment.domain.scholarship.response.MyScholarshipResponseDTO;
 import com.msa4lmsv2payment.domain.scholarship.response.PaymentScholarshipAllocationResponseDTO;
 import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBill;
+import com.msa4lmsv2payment.domain.tuitionbill.response.TuitionBillResponseDTO;
 import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBillStatus;
 import com.msa4lmsv2payment.domain.tuitionbill.service.TuitionBillService;
 import com.msa4lmsv2payment.global.security.CurrentUser;
@@ -126,5 +128,23 @@ class ScholarshipServiceTest {
                 scholarshipService.calculateAllocation(admin, new PaymentScholarshipAllocationRequestDTO(1L));
 
         assertThat(result.actualPaymentAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    // 학생 · 장학금 수혜 내역 - 여러 학기의 장학금을 학기 ID와 함께 반환한다.
+    @Test
+    void 내_장학금_수혜_내역은_학기_ID와_함께_반환된다() {
+        CurrentUser student = new CurrentUser(1L, "STUDENT");
+        when(tuitionBillService.getMyTuitionBills(student)).thenReturn(List.of(
+                new TuitionBillResponseDTO(1L, 20260001L, 5L, BigDecimal.valueOf(4_200_000), LocalDate.of(2026, 9, 1), TuitionBillStatus.PARTIAL),
+                new TuitionBillResponseDTO(2L, 20260001L, 6L, BigDecimal.valueOf(4_200_000), LocalDate.of(2027, 2, 1), TuitionBillStatus.UNPAID)
+        ));
+        Scholarship s1 = new Scholarship(1L, ScholarshipType.MERIT, BigDecimal.valueOf(1_000_000), "1학기 성적우수", 9L);
+        Scholarship s2 = new Scholarship(2L, ScholarshipType.NEED_BASED, BigDecimal.valueOf(500_000), "2학기 가계곤란", 9L);
+        when(scholarshipRepository.findByTuitionBillIdIn(List.of(1L, 2L))).thenReturn(List.of(s1, s2));
+
+        List<MyScholarshipResponseDTO> result = scholarshipService.getMyScholarships(student);
+
+        assertThat(result).hasSize(2);
+        assertThat(result).extracting(MyScholarshipResponseDTO::semesterId).containsExactlyInAnyOrder(5L, 6L);
     }
 }

@@ -5,16 +5,22 @@ import com.msa4lmsv2payment.global.error.ScholarshipExceedsBillingAmountExceptio
 import com.msa4lmsv2payment.domain.scholarship.repository.ScholarshipRepository;
 import com.msa4lmsv2payment.domain.scholarship.request.PaymentScholarshipAllocationRequestDTO;
 import com.msa4lmsv2payment.domain.scholarship.request.ScholarshipDiscountRequestDTO;
+import com.msa4lmsv2payment.domain.scholarship.response.MyScholarshipResponseDTO;
 import com.msa4lmsv2payment.domain.scholarship.response.PaymentScholarshipAllocationResponseDTO;
 import com.msa4lmsv2payment.domain.scholarship.response.ScholarshipResponseDTO;
 import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBill;
+import com.msa4lmsv2payment.domain.tuitionbill.response.TuitionBillResponseDTO;
 import com.msa4lmsv2payment.domain.tuitionbill.service.TuitionBillService;
 import com.msa4lmsv2payment.global.security.CurrentUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -47,6 +53,19 @@ public class ScholarshipService {
         );
 
         return ScholarshipResponseDTO.from(scholarshipRepository.save(scholarship));
+    }
+
+    // 학생 · 장학금 수혜 내역 화면 - 본인의 모든 학기 장학금을 학기 ID와 함께 반환한다(Figma 요구: 학기 선택 시 수혜 종류·금액 표시).
+    // getMyTuitionBills가 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다(B3번).
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public List<MyScholarshipResponseDTO> getMyScholarships(CurrentUser student) {
+        List<TuitionBillResponseDTO> myBills = tuitionBillService.getMyTuitionBills(student);
+        Map<Long, Long> semesterIdByTuitionBillId = myBills.stream()
+                .collect(Collectors.toMap(TuitionBillResponseDTO::id, TuitionBillResponseDTO::semesterId));
+
+        return scholarshipRepository.findByTuitionBillIdIn(myBills.stream().map(TuitionBillResponseDTO::id).toList()).stream()
+                .map(scholarship -> MyScholarshipResponseDTO.from(scholarship, semesterIdByTuitionBillId.get(scholarship.getTuitionBillId())))
+                .toList();
     }
 
     // 이미 소유권이 확인된 등록금 고지에 대해 순수 로컬 DB 합계만 구한다(Academic 호출 없음).
