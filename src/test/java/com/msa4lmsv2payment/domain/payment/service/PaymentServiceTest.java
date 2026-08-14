@@ -51,6 +51,8 @@ class PaymentServiceTest {
     private TossPaymentsClient tossPaymentsClient;
     @Mock
     private PaymentResultRecorder paymentResultRecorder;
+    @Mock
+    private TuitionOverpaymentGuard tuitionOverpaymentGuard;
 
     @InjectMocks
     private PaymentService paymentService;

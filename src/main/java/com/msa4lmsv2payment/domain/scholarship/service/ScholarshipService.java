@@ -49,6 +49,13 @@ public class ScholarshipService {
         return ScholarshipResponseDTO.from(scholarshipRepository.save(scholarship));
     }
 
+    // 이미 소유권이 확인된 등록금 고지에 대해 순수 로컬 DB 합계만 구한다(Academic 호출 없음).
+    public BigDecimal sumScholarshipAmount(Long tuitionBillId) {
+        return scholarshipRepository.findByTuitionBillId(tuitionBillId).stream()
+                .map(Scholarship::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
     public PaymentScholarshipAllocationResponseDTO calculateAllocation(CurrentUser currentUser, PaymentScholarshipAllocationRequestDTO request) {
         TuitionBill tuitionBill = tuitionBillService.getOwnedTuitionBillOrThrow(currentUser, request.tuitionBillId());
 
