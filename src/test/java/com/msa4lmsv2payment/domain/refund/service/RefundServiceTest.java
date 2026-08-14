@@ -7,6 +7,7 @@ import com.msa4lmsv2payment.domain.refund.entity.RefundType;
 import com.msa4lmsv2payment.global.error.RefundNotFoundException;
 import com.msa4lmsv2payment.global.error.RefundNotRetryableException;
 import com.msa4lmsv2payment.global.error.RefundRetryLimitExceededException;
+import com.msa4lmsv2payment.domain.payment.repository.PaymentRepository;
 import com.msa4lmsv2payment.domain.refund.repository.RefundRepository;
 import com.msa4lmsv2payment.domain.refund.request.RefundRetryRequestDTO;
 import com.msa4lmsv2payment.domain.refund.request.VirtualAccountRefundRequestDTO;
@@ -20,7 +21,9 @@ import com.msa4lmsv2payment.domain.virtualaccount.entity.VirtualAccountStatus;
 import com.msa4lmsv2payment.domain.virtualaccount.service.VirtualAccountService;
 import com.msa4lmsv2payment.global.client.AcademicClient;
 import com.msa4lmsv2payment.global.client.AcademicSemesterResponse;
-import com.msa4lmsv2payment.global.client.AcademicWithdrawalHistoryResponse;
+import com.msa4lmsv2payment.global.client.AcademicWithdrawalResponse;
+import com.msa4lmsv2payment.global.error.TuitionBillAccessDeniedException;
+import com.msa4lmsv2payment.global.error.WithdrawalNotApprovedException;
 import com.msa4lmsv2payment.global.security.CurrentUser;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -43,6 +46,8 @@ class RefundServiceTest {
 
     @Mock
     private RefundRepository refundRepository;
+    @Mock
+    private PaymentRepository paymentRepository;
     @Mock
     private TuitionBillService tuitionBillService;
     @Mock
@@ -77,20 +82,49 @@ class RefundServiceTest {
 
     // SCRUM-63: 자퇴 예상 환불금 조회
     @Test
-    void 예상_환불금은_고지금액에_환불률을_곱한_값이고_저장하지_않는다() {
+    void 예상_환불금은_성공결제합계에서_성공환불합계를_뺀_값에_환불률을_곱한_값이고_저장하지_않는다() {
         setCalculatorField();
         CurrentUser student = new CurrentUser(1L, "STUDENT");
         TuitionBill bill = tuitionBill(1L, BigDecimal.valueOf(4_200_000));
         when(tuitionBillService.getOwnedTuitionBillOrThrow(student, 1L)).thenReturn(bill);
-        when(academicClient.findLatestWithdrawalHistory(20260001L))
-                .thenReturn(new AcademicWithdrawalHistoryResponse("ENROLLED", "ON_LEAVE", LocalDateTime.of(2026, 9, 18, 10, 0)));
+        when(academicClient.findWithdrawal(1L))
+                .thenReturn(new AcademicWithdrawalResponse(1L, 20260001L, "APPROVED", LocalDate.of(2026, 9, 18)));
         when(academicClient.findSemester(5L))
                 .thenReturn(new AcademicSemesterResponse(5L, "SECOND", true, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 12, 18)));
+        when(paymentRepository.sumSucceededAmount(1L)).thenReturn(BigDecimal.valueOf(4_200_000));
+        when(refundRepository.sumSucceededAmount(1L)).thenReturn(BigDecimal.ZERO);
 
-        var result = refundService.estimateWithdrawalRefund(student, 1L);
+        var result = refundService.estimateWithdrawalRefund(student, 1L, 1L);
 
         assertThat(result.refundRate()).isEqualByComparingTo(new BigDecimal("0.8333"));
+        assertThat(result.refundableBase()).isEqualByComparingTo(BigDecimal.valueOf(4_200_000));
         assertThat(result.estimatedRefundAmount()).isEqualByComparingTo(BigDecimal.valueOf(4_200_000).multiply(new BigDecimal("0.8333")));
+    }
+
+    @Test
+    void 본인의_자퇴_신청이_아니면_거부된다() {
+        setCalculatorField();
+        CurrentUser student = new CurrentUser(1L, "STUDENT");
+        TuitionBill bill = tuitionBill(1L, BigDecimal.valueOf(4_200_000));
+        when(tuitionBillService.getOwnedTuitionBillOrThrow(student, 1L)).thenReturn(bill);
+        when(academicClient.findWithdrawal(1L))
+                .thenReturn(new AcademicWithdrawalResponse(1L, 99999999L, "APPROVED", LocalDate.of(2026, 9, 18)));
+
+        assertThatThrownBy(() -> refundService.estimateWithdrawalRefund(student, 1L, 1L))
+                .isInstanceOf(TuitionBillAccessDeniedException.class);
+    }
+
+    @Test
+    void 승인되지_않은_자퇴_신청은_거부된다() {
+        setCalculatorField();
+        CurrentUser student = new CurrentUser(1L, "STUDENT");
+        TuitionBill bill = tuitionBill(1L, BigDecimal.valueOf(4_200_000));
+        when(tuitionBillService.getOwnedTuitionBillOrThrow(student, 1L)).thenReturn(bill);
+        when(academicClient.findWithdrawal(1L))
+                .thenReturn(new AcademicWithdrawalResponse(1L, 20260001L, "PENDING", null));
+
+        assertThatThrownBy(() -> refundService.estimateWithdrawalRefund(student, 1L, 1L))
+                .isInstanceOf(WithdrawalNotApprovedException.class);
     }
 
     // SCRUM-166: 자퇴 처리일 기준 환불률 적용
@@ -100,19 +134,22 @@ class RefundServiceTest {
         CurrentUser admin = new CurrentUser(1L, "ADMIN");
         TuitionBill bill = tuitionBill(1L, BigDecimal.valueOf(4_200_000));
         when(tuitionBillService.getOwnedTuitionBillOrThrow(admin, 1L)).thenReturn(bill);
-        when(academicClient.findLatestWithdrawalHistory(20260001L))
-                .thenReturn(new AcademicWithdrawalHistoryResponse("ENROLLED", "ON_LEAVE", LocalDateTime.of(2026, 9, 18, 10, 0)));
+        when(academicClient.findWithdrawal(1L))
+                .thenReturn(new AcademicWithdrawalResponse(1L, 20260001L, "APPROVED", LocalDate.of(2026, 9, 18)));
         when(academicClient.findSemester(5L))
                 .thenReturn(new AcademicSemesterResponse(5L, "SECOND", true, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 12, 18)));
+        when(paymentRepository.sumSucceededAmount(1L)).thenReturn(BigDecimal.valueOf(4_200_000));
+        when(refundRepository.sumSucceededAmount(1L)).thenReturn(BigDecimal.ZERO);
         when(refundRepository.findByTuitionBillIdAndRefundType(1L, RefundType.WITHDRAWAL)).thenReturn(Optional.empty());
         when(refundRecorder.saveRateApplied(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
                 .thenAnswer(inv -> inv.getArgument(1));
 
-        RefundResponseDTO result = refundService.applyWithdrawalRefundRate(admin, new WithdrawalRefundRateRequestDTO(1L));
+        RefundResponseDTO result = refundService.applyWithdrawalRefundRate(admin, new WithdrawalRefundRateRequestDTO(1L, 1L));
 
         assertThat(result.status()).isEqualTo(RefundStatus.REQUESTED);
         assertThat(result.refundType()).isEqualTo(RefundType.WITHDRAWAL);
+        assertThat(result.withdrawalId()).isEqualTo(1L);
     }
 
     // 비기능 #19: 동일 환불 요청은 중복 실행되지 않는다
@@ -122,10 +159,12 @@ class RefundServiceTest {
         CurrentUser admin = new CurrentUser(1L, "ADMIN");
         TuitionBill bill = tuitionBill(1L, BigDecimal.valueOf(4_200_000));
         when(tuitionBillService.getOwnedTuitionBillOrThrow(admin, 1L)).thenReturn(bill);
-        when(academicClient.findLatestWithdrawalHistory(20260001L))
-                .thenReturn(new AcademicWithdrawalHistoryResponse("ENROLLED", "ON_LEAVE", LocalDateTime.of(2026, 9, 18, 10, 0)));
+        when(academicClient.findWithdrawal(1L))
+                .thenReturn(new AcademicWithdrawalResponse(1L, 20260001L, "APPROVED", LocalDate.of(2026, 9, 18)));
         when(academicClient.findSemester(5L))
                 .thenReturn(new AcademicSemesterResponse(5L, "SECOND", true, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 12, 18)));
+        when(paymentRepository.sumSucceededAmount(1L)).thenReturn(BigDecimal.valueOf(4_200_000));
+        when(refundRepository.sumSucceededAmount(1L)).thenReturn(BigDecimal.ZERO);
         Refund existing = new Refund(1L, RefundType.WITHDRAWAL, BigDecimal.ZERO, BigDecimal.ZERO, RefundStatus.REQUESTED);
         setField(existing, "id", 10L);
         when(refundRepository.findByTuitionBillIdAndRefundType(1L, RefundType.WITHDRAWAL)).thenReturn(Optional.of(existing));
@@ -133,12 +172,13 @@ class RefundServiceTest {
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
                 .thenAnswer(inv -> inv.getArgument(1));
 
-        RefundResponseDTO result = refundService.applyWithdrawalRefundRate(admin, new WithdrawalRefundRateRequestDTO(1L));
+        RefundResponseDTO result = refundService.applyWithdrawalRefundRate(admin, new WithdrawalRefundRateRequestDTO(1L, 1L));
 
         // 새 행을 만들지 않고 같은 id(10L)의 기존 행을 갱신했는지 확인 - 비기능 #19
         assertThat(result.id()).isEqualTo(10L);
         assertThat(result.refundRate()).isEqualByComparingTo(new BigDecimal("0.8333"));
     }
+
 
     // SCRUM-175: 가상계좌 환불 요청
     @Test

@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS refunds (
     payment_id          BIGINT COMMENT 'week-3에서 payments 테이블 생성 후 FK 추가 예정, 그전까지 FK 없음',
     virtual_account_id  BIGINT,
     tuition_bill_id     BIGINT NOT NULL,
+    withdrawal_id       BIGINT COMMENT 'Academic withdrawal_requests.id, FK 아님. WITHDRAWAL 환불에만 사용',
     refund_type         VARCHAR(20) NOT NULL COMMENT 'WITHDRAWAL, PG_CANCEL, EXCESS_DEPOSIT',
     amount              DECIMAL(12, 0) NOT NULL,
     refund_rate         DECIMAL(5, 4) NOT NULL COMMENT '7-2절 반환율표 기준 (예: 0.8333 = 5/6)',

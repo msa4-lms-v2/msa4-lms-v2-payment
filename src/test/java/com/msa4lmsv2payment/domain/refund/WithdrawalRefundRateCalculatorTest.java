@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -28,7 +27,7 @@ class WithdrawalRefundRateCalculatorTest {
     @Test
     void 개강_전_자퇴는_100퍼센트_반환() {
         BigDecimal rate = calculator.calculate(
-                LocalDateTime.of(2026, 8, 31, 10, 0), SEMESTER_START, SEMESTER_END);
+                LocalDate.of(2026, 8, 31), SEMESTER_START, SEMESTER_END);
 
         assertThat(rate).isEqualByComparingTo(BigDecimal.ONE);
     }
@@ -36,7 +35,7 @@ class WithdrawalRefundRateCalculatorTest {
     @Test
     void 수업일수_1_3_경과_전은_5_6_반환() {
         BigDecimal rate = calculator.calculate(
-                LocalDateTime.of(2026, 9, 1, 10, 0), SEMESTER_START, SEMESTER_END);
+                LocalDate.of(2026, 9, 1), SEMESTER_START, SEMESTER_END);
 
         assertThat(rate).isEqualByComparingTo(new BigDecimal("0.8333"));
     }
@@ -44,7 +43,7 @@ class WithdrawalRefundRateCalculatorTest {
     @Test
     void 발표일_9월18일은_5_6_구간이다() {
         BigDecimal rate = calculator.calculate(
-                LocalDateTime.of(2026, 9, 18, 10, 0), SEMESTER_START, SEMESTER_END);
+                LocalDate.of(2026, 9, 18), SEMESTER_START, SEMESTER_END);
 
         assertThat(rate).isEqualByComparingTo(new BigDecimal("0.8333"));
     }
@@ -52,7 +51,7 @@ class WithdrawalRefundRateCalculatorTest {
     @Test
     void 수업일수_2_3_경과_후는_0퍼센트_반환() {
         BigDecimal rate = calculator.calculate(
-                LocalDateTime.of(2026, 12, 1, 10, 0), SEMESTER_START, SEMESTER_END);
+                LocalDate.of(2026, 12, 1), SEMESTER_START, SEMESTER_END);
 
         assertThat(rate).isEqualByComparingTo(BigDecimal.ZERO);
     }

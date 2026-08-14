@@ -9,7 +9,6 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Set;
 
@@ -34,10 +33,12 @@ public class AcademicStubClient implements AcademicClient {
 
     /**
      * 환불률 구간 4개(5/6, 2/3, 1/2, 0%)를 값만 바꿔 시연하기 위한 설정값 - MY-PLAN_payment.md 4-1절 스텁 스펙.
-     * 기본값(발표일 2026-09-18)은 7-3절 예시대로 5/6 구간에 해당한다.
+     * 기본값(효력일 2026-09-18)은 7-3절 예시대로 5/6 구간에 해당한다.
      */
-    @Value("${academic.stub.withdrawal-processed-at:2026-09-18T10:00:00}")
-    private LocalDateTime withdrawalProcessedAt;
+    @Value("${academic.stub.withdrawal-effective-date:2026-09-18}")
+    private LocalDate withdrawalEffectiveDate;
+
+    private static final Long STUB_WITHDRAWAL_ID = 1L;
 
     @PostConstruct
     public void warnStubActive() {
@@ -68,10 +69,10 @@ public class AcademicStubClient implements AcademicClient {
     }
 
     @Override
-    public AcademicWithdrawalHistoryResponse findLatestWithdrawalHistory(Long studentId) {
-        if (!KNOWN_STUDENT_IDS.contains(studentId)) {
-            throw new AcademicResourceNotFoundException("자퇴 처리 이력을 찾을 수 없습니다: studentId=" + studentId);
+    public AcademicWithdrawalResponse findWithdrawal(Long withdrawalId) {
+        if (!STUB_WITHDRAWAL_ID.equals(withdrawalId)) {
+            throw new AcademicResourceNotFoundException("자퇴 신청을 찾을 수 없습니다: withdrawalId=" + withdrawalId);
         }
-        return new AcademicWithdrawalHistoryResponse("ENROLLED", "ON_LEAVE", withdrawalProcessedAt);
+        return new AcademicWithdrawalResponse(STUB_WITHDRAWAL_ID, 20260001L, "APPROVED", withdrawalEffectiveDate);
     }
 }
