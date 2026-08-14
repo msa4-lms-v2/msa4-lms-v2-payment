@@ -21,7 +21,7 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class IdempotencyService {
 
-    private static final long EXPIRES_IN_DAYS = 1;
+    private static final long EXPIRES_IN_MINUTES = 5;
 
     private final IdempotencyKeyRepository idempotencyKeyRepository;
     private final ObjectMapper objectMapper;
@@ -37,7 +37,7 @@ public class IdempotencyService {
             try {
                 idempotencyKeyRepository.saveAndFlush(new IdempotencyKey(
                         idempotencyKey, requesterId, endpoint, requestHash,
-                        IdempotencyKeyStatus.IN_PROGRESS, LocalDateTime.now().plusDays(EXPIRES_IN_DAYS)));
+                        IdempotencyKeyStatus.IN_PROGRESS, LocalDateTime.now().plusMinutes(EXPIRES_IN_MINUTES)));
                 return Optional.empty();
             } catch (DataIntegrityViolationException e) {
                 throw new IdempotencyKeyConflictException("동일한 Idempotency-Key가 동시에 사용되었습니다.");
@@ -52,14 +52,19 @@ public class IdempotencyService {
         }
         if (key.getStatus() == IdempotencyKeyStatus.COMPLETED) {
             if (key.getResponseSnapshot() == null || key.getResponseSnapshot().isBlank()) {
-                throw new IdempotencyKeyConflictException("완료 응답을 복원할 수 없는 Idempotency-Key입니다.");
+                throw new IdempotencyKeyConflictException("응답을 복원할 수 없는 Idempotency-Key입니다.");
             }
             return Optional.of(deserialize(key.getResponseSnapshot(), responseType));
+        }
+        if (key.getStatus() == IdempotencyKeyStatus.RECONCILIATION_REQUIRED) {
+            throw new IdempotencyKeyConflictException("이전 요청 결과를 확인하는 중입니다. 잠시 후 다시 시도해 주세요.");
         }
         if (key.getStatus() == IdempotencyKeyStatus.IN_PROGRESS && !key.isExpired()) {
             throw new IdempotencyKeyConflictException("동일한 요청이 이미 처리 중입니다.");
         }
-        key.restart(LocalDateTime.now().plusDays(EXPIRES_IN_DAYS));
+        // IN_PROGRESS(만료) 또는 FAILED는 재시도를 허용한다 - FAILED를 COMPLETED처럼 영구 재생하면
+        // 일시적 실패 이후 사용자가 같은 키로 다시는 성공할 수 없게 된다.
+        key.restart(LocalDateTime.now().plusMinutes(EXPIRES_IN_MINUTES));
         return Optional.empty();
     }
 
@@ -69,6 +74,22 @@ public class IdempotencyService {
         IdempotencyKey key = idempotencyKeyRepository.findByIdempotencyKey(idempotencyKey)
                 .orElseThrow(() -> new IdempotencyKeyConflictException("예약되지 않은 Idempotency-Key입니다."));
         key.complete(snapshot);
+    }
+
+    @Transactional
+    public void markFailed(String idempotencyKey, Object response) {
+        String snapshot = serialize(response);
+        IdempotencyKey key = idempotencyKeyRepository.findByIdempotencyKey(idempotencyKey)
+                .orElseThrow(() -> new IdempotencyKeyConflictException("예약되지 않은 Idempotency-Key입니다."));
+        key.fail(snapshot);
+    }
+
+    @Transactional
+    public void markReconciliationRequired(String idempotencyKey, Object response) {
+        String snapshot = serialize(response);
+        IdempotencyKey key = idempotencyKeyRepository.findByIdempotencyKey(idempotencyKey)
+                .orElseThrow(() -> new IdempotencyKeyConflictException("예약되지 않은 Idempotency-Key입니다."));
+        key.requireReconciliation(snapshot);
     }
 
     private void validateKey(String idempotencyKey) {
