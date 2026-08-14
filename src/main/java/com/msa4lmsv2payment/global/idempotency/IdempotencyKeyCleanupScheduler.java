@@ -10,14 +10,18 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * idempotency_keys는 물리 삭제 대상 테이블(ERD 1절)인데 만료된 행을 지우는 경로가 없어 무한정 쌓이고 있었다.
- * expires_at이 지난 행을 매일 지운다 - IN_PROGRESS/COMPLETED 상태와 무관하게 만료 여부로만 판단한다
- * (IdempotencyService.verifyAndReserve도 상태가 아니라 isExpired()로 재시도 허용 여부를 판단하는 것과 동일한 기준).
+ * 두 가지 책임을 분리해서 갖는다.
+ * 1) 매분: 선점(IN_PROGRESS) 후 만료 시간까지 완료되지 못한 키를 FAILED로 전환해 재시도를 막지 않는다.
+ * 2) 매일: idempotency_keys는 물리 삭제 대상 테이블(ERD 1절)이므로, 생성된 지 오래된 행(상태 무관)을 지운다.
+ *    완료/실패 상태를 재생하는 목적은 클라이언트가 재시도할 만한 기간 동안만 유효하면 충분하고, 그 기간이
+ *    지나면 계속 쌓아둘 이유가 없다.
  */
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class IdempotencyKeyCleanupScheduler {
+
+    private static final long RETENTION_DAYS = 7;
 
     private final IdempotencyKeyRepository idempotencyKeyRepository;
 
@@ -31,6 +35,16 @@ public class IdempotencyKeyCleanupScheduler {
         }
         if (!expiredKeys.isEmpty()) {
             log.info("만료된 IN_PROGRESS 멱등키 {}건 FAILED 처리", expiredKeys.size());
+        }
+    }
+
+    @Scheduled(cron = "0 0 4 * * *")
+    @Transactional
+    public void cleanupOldKeys() {
+        long deleted = idempotencyKeyRepository.deleteByCreatedAtBefore(
+                LocalDateTime.now().minusDays(RETENTION_DAYS));
+        if (deleted > 0) {
+            log.info("보존기간({}일)이 지난 idempotency_keys {}건 정리", RETENTION_DAYS, deleted);
         }
     }
 }

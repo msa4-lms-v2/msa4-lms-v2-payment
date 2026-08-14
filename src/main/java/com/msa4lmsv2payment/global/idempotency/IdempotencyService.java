@@ -50,17 +50,20 @@ public class IdempotencyService {
                 || !key.getRequestHash().equals(requestHash)) {
             throw new IdempotencyKeyConflictException("이미 다른 요청에 사용된 Idempotency-Key입니다.");
         }
-        if (key.getStatus() == IdempotencyKeyStatus.COMPLETED 
-                || key.getStatus() == IdempotencyKeyStatus.FAILED 
-                || key.getStatus() == IdempotencyKeyStatus.RECONCILIATION_REQUIRED) {
+        if (key.getStatus() == IdempotencyKeyStatus.COMPLETED) {
             if (key.getResponseSnapshot() == null || key.getResponseSnapshot().isBlank()) {
                 throw new IdempotencyKeyConflictException("응답을 복원할 수 없는 Idempotency-Key입니다.");
             }
             return Optional.of(deserialize(key.getResponseSnapshot(), responseType));
         }
+        if (key.getStatus() == IdempotencyKeyStatus.RECONCILIATION_REQUIRED) {
+            throw new IdempotencyKeyConflictException("이전 요청 결과를 확인하는 중입니다. 잠시 후 다시 시도해 주세요.");
+        }
         if (key.getStatus() == IdempotencyKeyStatus.IN_PROGRESS && !key.isExpired()) {
             throw new IdempotencyKeyConflictException("동일한 요청이 이미 처리 중입니다.");
         }
+        // IN_PROGRESS(만료) 또는 FAILED는 재시도를 허용한다 - FAILED를 COMPLETED처럼 영구 재생하면
+        // 일시적 실패 이후 사용자가 같은 키로 다시는 성공할 수 없게 된다.
         key.restart(LocalDateTime.now().plusMinutes(EXPIRES_IN_MINUTES));
         return Optional.empty();
     }

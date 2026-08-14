@@ -1,5 +1,6 @@
 package com.msa4lmsv2payment.domain.payment.entity;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
 import jakarta.persistence.EnumType;

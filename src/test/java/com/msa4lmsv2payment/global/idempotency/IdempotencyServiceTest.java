@@ -75,6 +75,31 @@ class IdempotencyServiceTest {
     }
 
     @Test
+    void 실패한_키는_재시도가_허용된다() {
+        idempotencyService = service();
+        IdempotencyKey existing = new IdempotencyKey("key-1", 1L, "/api/payment/refunds/virtual-account-requests",
+                hashOf("body"), IdempotencyKeyStatus.IN_PROGRESS, LocalDateTime.now().minusMinutes(1));
+        existing.fail("{\"error\": \"TIMEOUT\"}");
+        when(idempotencyKeyRepository.findByIdempotencyKey("key-1")).thenReturn(Optional.of(existing));
+
+        assertThat(idempotencyService.verifyAndReserve(
+                "key-1", 1L, "/api/payment/refunds/virtual-account-requests", "body", String.class)).isEmpty();
+    }
+
+    @Test
+    void 정산_확인_중인_키는_재시도가_거부된다() {
+        idempotencyService = service();
+        IdempotencyKey existing = new IdempotencyKey("key-1", 1L, "/api/payment/refunds/virtual-account-requests",
+                hashOf("body"), IdempotencyKeyStatus.IN_PROGRESS, LocalDateTime.now().plusDays(1));
+        existing.requireReconciliation("{\"error\": \"UNKNOWN\"}");
+        when(idempotencyKeyRepository.findByIdempotencyKey("key-1")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> idempotencyService.verifyAndReserve(
+                "key-1", 1L, "/api/payment/refunds/virtual-account-requests", "body", String.class))
+                .isInstanceOf(IdempotencyKeyConflictException.class);
+    }
+
+    @Test
     void DB_컬럼보다_긴_멱등키는_저장전에_거부된다() {
         idempotencyService = service();
 

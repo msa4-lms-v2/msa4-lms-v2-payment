@@ -10,4 +10,6 @@ public interface IdempotencyKeyRepository extends JpaRepository<IdempotencyKey, 
     Optional<IdempotencyKey> findByIdempotencyKey(String idempotencyKey);
 
     List<IdempotencyKey> findByStatusAndExpiresAtBefore(IdempotencyKeyStatus status, LocalDateTime cutoff);
+
+    long deleteByCreatedAtBefore(LocalDateTime cutoff);
 }
