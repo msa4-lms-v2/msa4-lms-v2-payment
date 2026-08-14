@@ -51,12 +51,20 @@ public class Payment {
 
     private LocalDateTime completedAt;
 
+    private Long installmentPlanItemId;
+
     public Payment(Long tuitionBillId, Long studentId, BigDecimal amount, PaymentMethod method, PaymentStatus status) {
         this.tuitionBillId = tuitionBillId;
         this.studentId = studentId;
         this.amount = amount;
         this.method = method;
         this.status = status;
+    }
+
+    public Payment(Long tuitionBillId, Long studentId, BigDecimal amount, PaymentMethod method, PaymentStatus status,
+                   Long installmentPlanItemId) {
+        this(tuitionBillId, studentId, amount, method, status);
+        this.installmentPlanItemId = installmentPlanItemId;
     }
 
     public void succeed(String pgTransactionId) {

@@ -1,5 +1,7 @@
 package com.msa4lmsv2payment.domain.payment.service;
 
+import com.msa4lmsv2payment.domain.installment.entity.InstallmentPlanItem;
+import com.msa4lmsv2payment.domain.installment.service.InstallmentPlanService;
 import com.msa4lmsv2payment.domain.payment.entity.Payment;
 import com.msa4lmsv2payment.domain.payment.entity.PaymentMethod;
 import com.msa4lmsv2payment.domain.payment.entity.PaymentStatus;
@@ -53,6 +55,8 @@ class PaymentServiceTest {
     private PaymentResultRecorder paymentResultRecorder;
     @Mock
     private TuitionOverpaymentGuard tuitionOverpaymentGuard;
+    @Mock
+    private InstallmentPlanService installmentPlanService;
 
     @InjectMocks
     private PaymentService paymentService;
@@ -110,10 +114,32 @@ class PaymentServiceTest {
             return p;
         });
 
-        var result = paymentService.createCheckoutSession(student, new CheckoutSessionRequestDTO(1L, PaymentMethod.CARD));
+        var result = paymentService.createCheckoutSession(student, new CheckoutSessionRequestDTO(1L, PaymentMethod.CARD, null));
 
         assertThat(result.orderId()).isEqualTo("PAY-7");
         assertThat(result.amount()).isEqualByComparingTo(BigDecimal.valueOf(4_200_000));
+    }
+
+    // 분할납부 - 회차 지정 시 서버가 계산한 전액이 아니라 회차 금액을 그대로 청구한다.
+    @Test
+    void 회차_지정시_전액이_아니라_회차_금액만_청구한다() {
+        CurrentUser student = new CurrentUser(1L, "STUDENT");
+        TuitionBill bill = tuitionBill(1L, BigDecimal.valueOf(4_200_000));
+        when(tuitionBillService.getOwnedTuitionBillOrThrow(student, 1L)).thenReturn(bill);
+        InstallmentPlanItem item = new InstallmentPlanItem(10L, 1, BigDecimal.valueOf(750_000), LocalDate.of(2026, 8, 25));
+        setField(item, "id", 101L);
+        when(installmentPlanService.getItemOrThrow(1L, 101L)).thenReturn(item);
+        when(paymentRepository.save(any())).thenAnswer(inv -> {
+            Payment p = inv.getArgument(0);
+            setField(p, "id", 7L);
+            return p;
+        });
+
+        var result = paymentService.createCheckoutSession(student, new CheckoutSessionRequestDTO(1L, PaymentMethod.CARD, 101L));
+
+        assertThat(result.amount()).isEqualByComparingTo(BigDecimal.valueOf(750_000));
+        org.mockito.Mockito.verify(installmentPlanService).assignPaymentToItem(101L, 7L);
+        verifyNoInteractions(scholarshipService);
     }
 
     // SCRUM-115: PG 결제 요청
@@ -133,6 +159,23 @@ class PaymentServiceTest {
 
         assertThat(result.status()).isEqualTo(PaymentStatus.SUCCEEDED);
         assertThat(result.pgTransactionId()).isEqualTo("pk_test");
+    }
+
+    // 분할납부 - 회차 결제가 성공하면 결제 저장과 별도로 해당 회차를 완료 처리한다.
+    @Test
+    void 회차_결제가_성공하면_해당_회차를_완료처리한다() {
+        CurrentUser student = new CurrentUser(1L, "STUDENT");
+        Payment payment = new Payment(1L, 20260001L, BigDecimal.valueOf(750_000), PaymentMethod.CARD, PaymentStatus.REQUESTED, 101L);
+        setField(payment, "id", 7L);
+        when(paymentRepository.findById(7L)).thenReturn(Optional.of(payment));
+        when(tuitionBillService.getOwnedTuitionBillOrThrow(student, 1L)).thenReturn(tuitionBill(1L, BigDecimal.valueOf(4_200_000)));
+        when(tossPaymentsClient.confirmPayment("pk_test", "PAY-7", BigDecimal.valueOf(750_000), "idem-1"))
+                .thenReturn(new TossPaymentResponse("pk_test", "PAY-7", "DONE", 750_000L));
+        when(paymentResultRecorder.saveWithAudit(eq(1L), any(), eq("DONE"))).thenAnswer(inv -> inv.getArgument(1));
+
+        paymentService.requestPgPayment(student, new PgPaymentRequestDTO("PAY-7", "pk_test", BigDecimal.valueOf(750_000)), "idem-1");
+
+        org.mockito.Mockito.verify(installmentPlanService).markItemPaid(101L, 7L);
     }
 
     @Test

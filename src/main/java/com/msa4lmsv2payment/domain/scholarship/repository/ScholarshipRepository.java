@@ -7,4 +7,6 @@ import java.util.List;
 
 public interface ScholarshipRepository extends JpaRepository<Scholarship, Long> {
     List<Scholarship> findByTuitionBillId(Long tuitionBillId);
+
+    List<Scholarship> findByTuitionBillIdIn(List<Long> tuitionBillIds);
 }
