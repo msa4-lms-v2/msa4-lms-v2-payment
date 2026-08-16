@@ -1,5 +1,6 @@
 package com.msa4lmsv2payment.domain.payment.controller;
 
+import com.msa4lmsv2payment.domain.payment.entity.PaymentStatus;
 import com.msa4lmsv2payment.domain.payment.request.CheckoutSessionRequestDTO;
 import com.msa4lmsv2payment.domain.payment.request.PaymentAmountValidationRequestDTO;
 import com.msa4lmsv2payment.domain.payment.request.PaymentResultSyncRequestDTO;
@@ -7,6 +8,7 @@ import com.msa4lmsv2payment.domain.payment.request.PaymentStatusRequestDTO;
 import com.msa4lmsv2payment.domain.payment.request.PgPaymentRequestDTO;
 import com.msa4lmsv2payment.domain.payment.response.CheckoutSessionResponseDTO;
 import com.msa4lmsv2payment.domain.payment.response.PaymentAmountValidationResponseDTO;
+import com.msa4lmsv2payment.domain.payment.response.PaymentHistoryResponseDTO;
 import com.msa4lmsv2payment.domain.payment.response.PaymentResponseDTO;
 import com.msa4lmsv2payment.domain.payment.response.PaymentSummaryResponseDTO;
 import com.msa4lmsv2payment.domain.payment.service.PaymentService;
@@ -37,6 +39,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.Optional;
 
 @Tag(name = "Payment", description = "PG 결제·납부 상태 반영")
@@ -166,5 +169,16 @@ public class PaymentController {
             @RequestParam Long tuitionBillId
     ) {
         return GlobalRes.success(paymentService.getPaymentSummary(currentUser, tuitionBillId));
+    }
+
+    @Operation(summary = "학생 본인 납부 이력 조회", description = "학생 본인의 일괄납부/분할납부 결제 이력을 학기·구분·상태와 함께 반환한다. status로 필터링할 수 있다. STUDENT 본인 범위.")
+    @ApiResponse(responseCode = "200", description = "조회 성공")
+    @PreAuthorize("hasRole('STUDENT')")
+    @GetMapping("/api/payment/me/payment-history")
+    public GlobalRes<List<PaymentHistoryResponseDTO>> getMyPaymentHistory(
+            @AuthenticationPrincipal CurrentUser currentUser,
+            @RequestParam(required = false) PaymentStatus status
+    ) {
+        return GlobalRes.success(paymentService.getMyPaymentHistory(currentUser, status));
     }
 }

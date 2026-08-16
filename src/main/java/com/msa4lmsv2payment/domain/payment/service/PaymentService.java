@@ -8,6 +8,7 @@ import com.msa4lmsv2payment.global.error.PaymentAmountMismatchException;
 import com.msa4lmsv2payment.global.error.PaymentNotFoundException;
 import com.msa4lmsv2payment.global.error.PaymentResultMismatchException;
 import com.msa4lmsv2payment.global.error.TossServiceUnavailableException;
+import com.msa4lmsv2payment.domain.payment.repository.PaymentHistoryQueryRepository;
 import com.msa4lmsv2payment.domain.payment.repository.PaymentRepository;
 import com.msa4lmsv2payment.domain.payment.request.CheckoutSessionRequestDTO;
 import com.msa4lmsv2payment.domain.payment.request.PaymentAmountValidationRequestDTO;
@@ -16,6 +17,7 @@ import com.msa4lmsv2payment.domain.payment.request.PaymentStatusRequestDTO;
 import com.msa4lmsv2payment.domain.payment.request.PgPaymentRequestDTO;
 import com.msa4lmsv2payment.domain.payment.response.CheckoutSessionResponseDTO;
 import com.msa4lmsv2payment.domain.payment.response.PaymentAmountValidationResponseDTO;
+import com.msa4lmsv2payment.domain.payment.response.PaymentHistoryResponseDTO;
 import com.msa4lmsv2payment.domain.payment.response.PaymentResponseDTO;
 import com.msa4lmsv2payment.domain.payment.response.PaymentSummaryResponseDTO;
 import com.msa4lmsv2payment.domain.scholarship.request.PaymentScholarshipAllocationRequestDTO;
@@ -33,6 +35,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -43,6 +46,7 @@ public class PaymentService {
     private static final String ORDER_ID_PREFIX = "PAYMENT-";
 
     private final PaymentRepository paymentRepository;
+    private final PaymentHistoryQueryRepository paymentHistoryQueryRepository;
     private final TuitionBillService tuitionBillService;
     private final ScholarshipService scholarshipService;
     private final TossPaymentsClient tossPaymentsClient;
@@ -177,6 +181,11 @@ public class PaymentService {
         return new PaymentSummaryResponseDTO(
                 tuitionBillId, tuitionBill.getBillingAmount(), allocation.totalScholarshipAmount(),
                 totalPaid, remaining, tuitionBill.getStatus());
+    }
+
+    // 학생 본인의 일괄납부/분할납부 이력 조회(등록금 신청 내역 화면용)
+    public List<PaymentHistoryResponseDTO> getMyPaymentHistory(CurrentUser currentUser, PaymentStatus status) {
+        return paymentHistoryQueryRepository.findMyHistory(currentUser.id(), status);
     }
 
     private Payment findByOrderIdOrThrow(String orderId) {
