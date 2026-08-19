@@ -1,5 +1,6 @@
 package com.msa4lmsv2payment.global.idempotency;
 
+import com.msa4lmsv2payment.global.error.IdempotencyKeyConflictException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;

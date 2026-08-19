@@ -20,4 +20,9 @@ public record GlobalRes<T>(
     public static <T> GlobalRes<T> fail(CustomResponseCode c, T data) {
         return new GlobalRes<>(c.getCode(), c.name(), data);
     }
+
+    // BusinessException은 코드가 아니라 발생 시점의 구체적인 사유(exception.getMessage())를 응답에 담아야 한다.
+    public static <T> GlobalRes<T> fail(CustomResponseCode c, String message, T data) {
+        return new GlobalRes<>(c.getCode(), message, data);
+    }
 }

@@ -130,7 +130,10 @@ public class TuitionBillService {
         getTuitionBillOrThrow(tuitionBillId).changeStatus(status);
     }
 
-    private Long resolveStudentId(CurrentUser currentUser) {
+    // Academic 호출 동안 DB 커넥션을 붙잡지 않도록 트랜잭션 밖에서 실행한다(B3번).
+    // users.id(CurrentUser.id())를 students.id로 변환하는 유일한 통로 - 다른 도메인도 본인 학번이 필요하면 이 메서드를 거친다.
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public Long resolveStudentId(CurrentUser currentUser) {
         return academicClient.findStudentByUserId(currentUser.id()).id();
     }
 }

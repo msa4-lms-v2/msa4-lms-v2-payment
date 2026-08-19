@@ -8,6 +8,7 @@ import com.msa4lmsv2payment.domain.payment.entity.PaymentStatus;
 import com.msa4lmsv2payment.global.error.PaymentAmountMismatchException;
 import com.msa4lmsv2payment.global.error.PaymentNotFoundException;
 import com.msa4lmsv2payment.global.error.PaymentResultMismatchException;
+import com.msa4lmsv2payment.domain.payment.repository.PaymentHistoryQueryRepository;
 import com.msa4lmsv2payment.domain.payment.repository.PaymentRepository;
 import com.msa4lmsv2payment.domain.payment.request.CheckoutSessionRequestDTO;
 import com.msa4lmsv2payment.domain.payment.request.PaymentAmountValidationRequestDTO;
@@ -38,6 +39,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
@@ -45,6 +47,8 @@ class PaymentServiceTest {
 
     @Mock
     private PaymentRepository paymentRepository;
+    @Mock
+    private PaymentHistoryQueryRepository paymentHistoryQueryRepository;
     @Mock
     private TuitionBillService tuitionBillService;
     @Mock
@@ -311,5 +315,16 @@ class PaymentServiceTest {
         assertThat(result.totalScholarshipAmount()).isEqualByComparingTo(BigDecimal.valueOf(2_000_000));
         assertThat(result.totalPaidAmount()).isEqualByComparingTo(BigDecimal.valueOf(1_200_000));
         assertThat(result.remainingAmount()).isEqualByComparingTo(BigDecimal.valueOf(1_000_000));
+    }
+
+    // 회귀 테스트: users.id를 students.id로 착각해 조회하던 버그(2026-08-19 검수) 재발 방지
+    @Test
+    void 납부이력_조회는_currentUser_id가_아니라_resolveStudentId로_변환한_학번을_쓴다() {
+        CurrentUser student = new CurrentUser(1L, "STUDENT");
+        when(tuitionBillService.resolveStudentId(student)).thenReturn(99L);
+
+        paymentService.getMyPaymentHistory(student, null);
+
+        verify(paymentHistoryQueryRepository).findMyHistory(99L, null);
     }
 }

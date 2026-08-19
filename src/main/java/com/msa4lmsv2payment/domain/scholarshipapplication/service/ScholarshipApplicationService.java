@@ -68,8 +68,11 @@ public class ScholarshipApplicationService {
         return ScholarshipApplicationResponseDTO.from(scholarshipApplicationRecorder.saveWithAudit(student.id(), application));
     }
 
+    // resolveStudentId가 Academic을 호출해 트랜잭션 밖에서 실행한다(B3번).
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public List<ScholarshipApplicationResponseDTO> getMyApplications(CurrentUser student) {
-        return scholarshipApplicationRepository.findByStudentIdOrderByCreatedAtDesc(student.id()).stream()
+        Long studentId = tuitionBillService.resolveStudentId(student);
+        return scholarshipApplicationRepository.findByStudentIdOrderByCreatedAtDesc(studentId).stream()
                 .map(ScholarshipApplicationResponseDTO::from)
                 .toList();
     }

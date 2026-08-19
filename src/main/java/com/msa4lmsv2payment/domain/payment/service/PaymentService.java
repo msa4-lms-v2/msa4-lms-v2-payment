@@ -184,8 +184,11 @@ public class PaymentService {
     }
 
     // 학생 본인의 일괄납부/분할납부 이력 조회(등록금 신청 내역 화면용)
+    // resolveStudentId가 Academic을 호출해 트랜잭션 밖에서 실행한다(B3번).
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public List<PaymentHistoryResponseDTO> getMyPaymentHistory(CurrentUser currentUser, PaymentStatus status) {
-        return paymentHistoryQueryRepository.findMyHistory(currentUser.id(), status);
+        Long studentId = tuitionBillService.resolveStudentId(currentUser);
+        return paymentHistoryQueryRepository.findMyHistory(studentId, status);
     }
 
     private Payment findByOrderIdOrThrow(String orderId) {
