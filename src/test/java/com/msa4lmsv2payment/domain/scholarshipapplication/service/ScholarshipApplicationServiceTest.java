@@ -31,6 +31,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -180,5 +181,17 @@ class ScholarshipApplicationServiceTest {
         assertThatThrownBy(() -> scholarshipApplicationService.reviewApplication(admin, 1L,
                 new ScholarshipApplicationReviewRequestDTO(ScholarshipApplicationDecision.REJECT, "사유")))
                 .isInstanceOf(ScholarshipApplicationAlreadyReviewedException.class);
+    }
+
+    // 회귀 테스트: users.id를 students.id로 착각해 조회하던 버그(2026-08-19 검수) 재발 방지
+    @Test
+    void 본인_신청_조회는_currentUser_id가_아니라_resolveStudentId로_변환한_학번을_쓴다() {
+        CurrentUser student = new CurrentUser(1L, "STUDENT");
+        when(tuitionBillService.resolveStudentId(student)).thenReturn(99L);
+        when(scholarshipApplicationRepository.findByStudentIdOrderByCreatedAtDesc(99L)).thenReturn(List.of());
+
+        scholarshipApplicationService.getMyApplications(student);
+
+        org.mockito.Mockito.verify(scholarshipApplicationRepository).findByStudentIdOrderByCreatedAtDesc(99L);
     }
 }

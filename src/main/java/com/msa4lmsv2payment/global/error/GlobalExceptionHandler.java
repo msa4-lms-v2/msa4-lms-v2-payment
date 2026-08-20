@@ -26,7 +26,7 @@ public class GlobalExceptionHandler {
         } else {
             log.warn("[{}] {}", c.getCode(), e.getMessage());
         }
-        return ResponseEntity.status(c.getHttpStatus()).body(GlobalRes.fail(c, null));
+        return ResponseEntity.status(c.getHttpStatus()).body(GlobalRes.fail(c, e.getMessage(), null));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

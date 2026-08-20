@@ -1,5 +1,6 @@
 package com.msa4lmsv2payment.global.idempotency;
 
+import com.msa4lmsv2payment.global.error.IdempotencyKeyConflictException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
