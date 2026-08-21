@@ -10,7 +10,7 @@ import com.msa4lmsv2payment.domain.tuitionbill.request.TuitionBillCreateRequestD
 import com.msa4lmsv2payment.domain.tuitionbill.response.TuitionBillResponseDTO;
 import com.msa4lmsv2payment.domain.tuitionbill.response.TuitionPaymentStatusResponseDTO;
 import com.msa4lmsv2payment.global.client.AcademicClient;
-import com.msa4lmsv2payment.global.response.PageRes;
+import com.msa4lmsv2payment.global.response.PageResponseDTO;
 import com.msa4lmsv2payment.global.security.CurrentUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -58,7 +58,7 @@ public class TuitionBillService {
         return TuitionBillResponseDTO.from(getOwnedTuitionBillOrThrow(student, tuitionBillId));
     }
 
-    public PageRes<TuitionBillResponseDTO> getAdminTuitionBills(TuitionBillStatus status, int page, int size) {
+    public PageResponseDTO<TuitionBillResponseDTO> getAdminTuitionBills(TuitionBillStatus status, int page, int size) {
         int clampedSize = Math.min(size, MAX_PAGE_SIZE);
         int safePage = Math.max(page, 1);
         int offset = (safePage - 1) * clampedSize;
@@ -69,7 +69,7 @@ public class TuitionBillService {
         long totalCount = tuitionBillQueryRepository.count(status);
         boolean hasNext = (long) offset + items.size() < totalCount;
 
-        return new PageRes<>(items, totalCount, safePage, clampedSize, hasNext);
+        return new PageResponseDTO<>(items, totalCount, safePage, clampedSize, hasNext);
     }
 
     // resolveStudentId가 Academic을 호출해 트랜잭션 밖에서 실행한다(B3번).

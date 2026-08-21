@@ -14,7 +14,7 @@ import com.msa4lmsv2payment.domain.payment.response.PaymentSummaryResponseDTO;
 import com.msa4lmsv2payment.domain.payment.service.PaymentService;
 import com.msa4lmsv2payment.global.config.OpenApiConfig;
 import com.msa4lmsv2payment.global.idempotency.IdempotencyService;
-import com.msa4lmsv2payment.global.response.GlobalRes;
+import com.msa4lmsv2payment.global.response.GlobalResponseDTO;
 import com.msa4lmsv2payment.global.security.CurrentUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -60,11 +60,11 @@ public class PaymentController {
     })
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
     @PostMapping("/api/payment/payment-amount-validation")
-    public GlobalRes<PaymentAmountValidationResponseDTO> validateAmount(
+    public GlobalResponseDTO<PaymentAmountValidationResponseDTO> validateAmount(
             @AuthenticationPrincipal CurrentUser currentUser,
             @RequestBody @Valid PaymentAmountValidationRequestDTO request
     ) {
-        return GlobalRes.success(paymentService.validateAmount(currentUser, request));
+        return GlobalResponseDTO.success(paymentService.validateAmount(currentUser, request));
     }
 
     @Operation(summary = "결제창 연동", description = "payments 행을 REQUESTED 상태로 미리 만들고 결제창에 넘길 orderId를 발급한다. STUDENT 본인 / ADMIN 관리 범위.")
@@ -76,11 +76,11 @@ public class PaymentController {
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
     @ResponseStatus(HttpStatus.CREATED)
     @PostMapping("/api/payment/payments")
-    public GlobalRes<CheckoutSessionResponseDTO> createCheckoutSession(
+    public GlobalResponseDTO<CheckoutSessionResponseDTO> createCheckoutSession(
             @AuthenticationPrincipal CurrentUser currentUser,
             @RequestBody @Valid CheckoutSessionRequestDTO request
     ) {
-        return GlobalRes.success(paymentService.createCheckoutSession(currentUser, request));
+        return GlobalResponseDTO.success(paymentService.createCheckoutSession(currentUser, request));
     }
 
     // API_SPEC.md 2.1절 - 결제 API는 Idempotency-Key 필수(비멱등 PG 승인 재시도 대비, code_convention.md B17번).
@@ -91,7 +91,7 @@ public class PaymentController {
             """)
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "승인 완료 또는 완료된 동일 멱등 요청의 저장 응답 재생",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = GlobalRes.class),
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = GlobalResponseDTO.class),
                             examples = @ExampleObject(name = "승인 성공", value = """
                                     {"code":"00","message":"SUCCESS","data":{"id":10,"tuitionBillId":1,"amount":4200000,"method":"CARD","pgTransactionId":"tgen_20260813_001","status":"SUCCEEDED"}}
                                     """))),
@@ -103,7 +103,7 @@ public class PaymentController {
     })
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
     @PostMapping(ENDPOINT_PAYMENTS_CONFIRM)
-    public GlobalRes<PaymentResponseDTO> requestPgPayment(
+    public GlobalResponseDTO<PaymentResponseDTO> requestPgPayment(
             @AuthenticationPrincipal CurrentUser currentUser,
             @Parameter(description = """
                     1~100자의 중복 요청 방지 키. 요청자, endpoint, payload가 모두 같은 완료 요청은 저장된 응답을 재생하며 토스 confirm을 다시 호출하지 않는다.
@@ -115,11 +115,11 @@ public class PaymentController {
         Optional<PaymentResponseDTO> replay = idempotencyService.verifyAndReserve(
                 idempotencyKey, currentUser.id(), ENDPOINT_PAYMENTS_CONFIRM, request, PaymentResponseDTO.class);
         if (replay.isPresent()) {
-            return GlobalRes.success(replay.orElseThrow());
+            return GlobalResponseDTO.success(replay.orElseThrow());
         }
         PaymentResponseDTO response = paymentService.requestPgPayment(currentUser, request, idempotencyKey);
         idempotencyService.markCompleted(idempotencyKey, response);
-        return GlobalRes.success(response);
+        return GlobalResponseDTO.success(response);
     }
 
     @Operation(summary = "결제 결과 수동 동기화", description = "PG 승인 결과가 불명확할 때 ADMIN이 토스 단건 조회 결과로 로컬 거래를 복구한다. orderId, paymentKey, totalAmount를 모두 대조하고 SUCCEEDED 종결 상태를 보호한다.")
@@ -132,12 +132,12 @@ public class PaymentController {
     })
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/api/payment/payments/{paymentId}/reconciliation")
-    public GlobalRes<PaymentResponseDTO> syncPaymentResult(
+    public GlobalResponseDTO<PaymentResponseDTO> syncPaymentResult(
             @AuthenticationPrincipal CurrentUser admin,
             @PathVariable Long paymentId,
             @RequestBody @Valid PaymentResultSyncRequestDTO request
     ) {
-        return GlobalRes.success(paymentService.syncPaymentResult(admin, paymentId, request));
+        return GlobalResponseDTO.success(paymentService.syncPaymentResult(admin, paymentId, request));
     }
 
     @Operation(summary = "납부 상태 반영", description = "SUCCEEDED 결제 합계와 실납부액을 비교해 등록금 고지 상태(UNPAID/PARTIAL/PAID)를 재계산한다. STUDENT 본인 / ADMIN 관리 범위.")
@@ -148,12 +148,12 @@ public class PaymentController {
     })
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
     @PatchMapping("/api/payment/payment-status")
-    public GlobalRes<Void> recalculateTuitionStatus(
+    public GlobalResponseDTO<Void> recalculateTuitionStatus(
             @AuthenticationPrincipal CurrentUser currentUser,
             @RequestBody @Valid PaymentStatusRequestDTO request
     ) {
         paymentService.recalculateTuitionStatus(currentUser, request);
-        return GlobalRes.success();
+        return GlobalResponseDTO.success();
     }
 
     @Operation(summary = "납부 현황 반영", description = "고지금액·장학금 합계·누적 납부액·잔액·상태를 한 번에 조회한다. STUDENT 본인 / ADMIN 관리 범위.")
@@ -164,21 +164,21 @@ public class PaymentController {
     })
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
     @GetMapping("/api/payment/payment-summary")
-    public GlobalRes<PaymentSummaryResponseDTO> getPaymentSummary(
+    public GlobalResponseDTO<PaymentSummaryResponseDTO> getPaymentSummary(
             @AuthenticationPrincipal CurrentUser currentUser,
             @RequestParam Long tuitionBillId
     ) {
-        return GlobalRes.success(paymentService.getPaymentSummary(currentUser, tuitionBillId));
+        return GlobalResponseDTO.success(paymentService.getPaymentSummary(currentUser, tuitionBillId));
     }
 
     @Operation(summary = "학생 본인 납부 이력 조회", description = "학생 본인의 일괄납부/분할납부 결제 이력을 학기·구분·상태와 함께 반환한다. status로 필터링할 수 있다. STUDENT 본인 범위.")
     @ApiResponse(responseCode = "200", description = "조회 성공")
     @PreAuthorize("hasRole('STUDENT')")
     @GetMapping("/api/payment/me/payment-history")
-    public GlobalRes<List<PaymentHistoryResponseDTO>> getMyPaymentHistory(
+    public GlobalResponseDTO<List<PaymentHistoryResponseDTO>> getMyPaymentHistory(
             @AuthenticationPrincipal CurrentUser currentUser,
             @RequestParam(required = false) PaymentStatus status
     ) {
-        return GlobalRes.success(paymentService.getMyPaymentHistory(currentUser, status));
+        return GlobalResponseDTO.success(paymentService.getMyPaymentHistory(currentUser, status));
     }
 }

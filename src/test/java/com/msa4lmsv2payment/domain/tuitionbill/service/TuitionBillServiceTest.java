@@ -12,7 +12,7 @@ import com.msa4lmsv2payment.global.client.AcademicClient;
 import com.msa4lmsv2payment.global.client.AcademicStudentExistsResponse;
 import com.msa4lmsv2payment.global.client.AcademicStudentResponse;
 import com.msa4lmsv2payment.global.error.AcademicResourceNotFoundException;
-import com.msa4lmsv2payment.global.response.PageRes;
+import com.msa4lmsv2payment.global.response.PageResponseDTO;
 import com.msa4lmsv2payment.global.security.CurrentUser;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -70,7 +70,7 @@ class TuitionBillServiceTest {
                 .thenReturn(List.of(tuitionBill(1L, 1L, BigDecimal.valueOf(4_200_000), TuitionBillStatus.UNPAID)));
         when(tuitionBillQueryRepository.count(TuitionBillStatus.UNPAID)).thenReturn(3L);
 
-        PageRes<TuitionBillResponseDTO> result = tuitionBillService.getAdminTuitionBills(TuitionBillStatus.UNPAID, 1, 1);
+        PageResponseDTO<TuitionBillResponseDTO> result = tuitionBillService.getAdminTuitionBills(TuitionBillStatus.UNPAID, 1, 1);
 
         assertThat(result.items()).hasSize(1);
         assertThat(result.totalCount()).isEqualTo(3L);
@@ -82,7 +82,7 @@ class TuitionBillServiceTest {
         when(tuitionBillQueryRepository.search(any(), eq(0), eq(100))).thenReturn(List.of());
         when(tuitionBillQueryRepository.count(any())).thenReturn(0L);
 
-        PageRes<TuitionBillResponseDTO> result = tuitionBillService.getAdminTuitionBills(null, 1, 500);
+        PageResponseDTO<TuitionBillResponseDTO> result = tuitionBillService.getAdminTuitionBills(null, 1, 500);
 
         assertThat(result.size()).isEqualTo(100);
     }

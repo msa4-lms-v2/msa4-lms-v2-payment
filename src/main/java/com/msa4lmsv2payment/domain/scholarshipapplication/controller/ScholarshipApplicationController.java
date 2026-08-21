@@ -6,7 +6,7 @@ import com.msa4lmsv2payment.domain.scholarshipapplication.request.ScholarshipApp
 import com.msa4lmsv2payment.domain.scholarshipapplication.response.ScholarshipApplicationPeriodResponseDTO;
 import com.msa4lmsv2payment.domain.scholarshipapplication.response.ScholarshipApplicationResponseDTO;
 import com.msa4lmsv2payment.domain.scholarshipapplication.service.ScholarshipApplicationService;
-import com.msa4lmsv2payment.global.response.GlobalRes;
+import com.msa4lmsv2payment.global.response.GlobalResponseDTO;
 import com.msa4lmsv2payment.global.security.CurrentUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -46,19 +46,19 @@ public class ScholarshipApplicationController {
     @PreAuthorize("hasRole('STUDENT')")
     @ResponseStatus(HttpStatus.CREATED)
     @PostMapping("/api/payment/scholarship-applications")
-    public GlobalRes<ScholarshipApplicationResponseDTO> createApplication(
+    public GlobalResponseDTO<ScholarshipApplicationResponseDTO> createApplication(
             @AuthenticationPrincipal CurrentUser student,
             @RequestBody @Valid ScholarshipApplicationCreateRequestDTO request
     ) {
-        return GlobalRes.success(scholarshipApplicationService.createApplication(student, request));
+        return GlobalResponseDTO.success(scholarshipApplicationService.createApplication(student, request));
     }
 
     @Operation(summary = "내 장학금 신청 내역", description = "STUDENT 본인이 신청한 장학금 목록을 최신순으로 조회한다.")
     @ApiResponse(responseCode = "200", description = "조회 성공")
     @PreAuthorize("hasRole('STUDENT')")
     @GetMapping("/api/payment/me/scholarship-applications")
-    public GlobalRes<List<ScholarshipApplicationResponseDTO>> getMyApplications(@AuthenticationPrincipal CurrentUser student) {
-        return GlobalRes.success(scholarshipApplicationService.getMyApplications(student));
+    public GlobalResponseDTO<List<ScholarshipApplicationResponseDTO>> getMyApplications(@AuthenticationPrincipal CurrentUser student) {
+        return GlobalResponseDTO.success(scholarshipApplicationService.getMyApplications(student));
     }
 
     @Operation(summary = "장학금 신청 심사", description = "ADMIN이 장학금 신청을 승인·반려한다. 승인 시 기존 장학금 감면 적용 로직을 그대로 재사용해 고지 금액 초과를 방어한다.")
@@ -71,12 +71,12 @@ public class ScholarshipApplicationController {
     })
     @PreAuthorize("hasRole('ADMIN')")
     @PatchMapping("/api/payment/scholarship-applications/{applicationId}/review")
-    public GlobalRes<ScholarshipApplicationResponseDTO> reviewApplication(
+    public GlobalResponseDTO<ScholarshipApplicationResponseDTO> reviewApplication(
             @AuthenticationPrincipal CurrentUser admin,
             @PathVariable Long applicationId,
             @RequestBody @Valid ScholarshipApplicationReviewRequestDTO request
     ) {
-        return GlobalRes.success(scholarshipApplicationService.reviewApplication(admin, applicationId, request));
+        return GlobalResponseDTO.success(scholarshipApplicationService.reviewApplication(admin, applicationId, request));
     }
 
     @Operation(summary = "장학금 신청기간 설정", description = "ADMIN이 학기별 장학금 신청기간을 설정한다. 학사일정 공지와 연결하려면 academicScheduleId를 함께 지정한다(선택).")
@@ -84,11 +84,11 @@ public class ScholarshipApplicationController {
     @PreAuthorize("hasRole('ADMIN')")
     @ResponseStatus(HttpStatus.CREATED)
     @PostMapping("/api/payment/scholarship-application-periods")
-    public GlobalRes<ScholarshipApplicationPeriodResponseDTO> createApplicationPeriod(
+    public GlobalResponseDTO<ScholarshipApplicationPeriodResponseDTO> createApplicationPeriod(
             @AuthenticationPrincipal CurrentUser admin,
             @RequestBody @Valid ScholarshipApplicationPeriodCreateRequestDTO request
     ) {
-        return GlobalRes.success(scholarshipApplicationService.createApplicationPeriod(admin, request));
+        return GlobalResponseDTO.success(scholarshipApplicationService.createApplicationPeriod(admin, request));
     }
 
     @Operation(summary = "장학금 신청기간 조회", description = "학기별 장학금 신청기간과 오늘 기준 신청 가능 여부를 조회한다. 학생 화면에서 배너/신청 버튼 노출 여부를 판단하는 용도. STUDENT/ADMIN 모두 접근 가능.")
@@ -98,7 +98,7 @@ public class ScholarshipApplicationController {
     })
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
     @GetMapping("/api/payment/scholarship-application-periods")
-    public GlobalRes<ScholarshipApplicationPeriodResponseDTO> getApplicationPeriod(@RequestParam Long semesterId) {
-        return GlobalRes.success(scholarshipApplicationService.getApplicationPeriod(semesterId));
+    public GlobalResponseDTO<ScholarshipApplicationPeriodResponseDTO> getApplicationPeriod(@RequestParam Long semesterId) {
+        return GlobalResponseDTO.success(scholarshipApplicationService.getApplicationPeriod(semesterId));
     }
 }

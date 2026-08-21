@@ -6,7 +6,7 @@ import com.msa4lmsv2payment.domain.scholarship.response.MyScholarshipResponseDTO
 import com.msa4lmsv2payment.domain.scholarship.response.PaymentScholarshipAllocationResponseDTO;
 import com.msa4lmsv2payment.domain.scholarship.response.ScholarshipResponseDTO;
 import com.msa4lmsv2payment.domain.scholarship.service.ScholarshipService;
-import com.msa4lmsv2payment.global.response.GlobalRes;
+import com.msa4lmsv2payment.global.response.GlobalResponseDTO;
 import com.msa4lmsv2payment.global.security.CurrentUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -42,11 +42,11 @@ public class ScholarshipController {
     @PreAuthorize("hasRole('ADMIN')")
     @ResponseStatus(HttpStatus.CREATED)
     @PostMapping("/api/payment/scholarship-discounts")
-    public GlobalRes<ScholarshipResponseDTO> applyScholarshipDiscount(
+    public GlobalResponseDTO<ScholarshipResponseDTO> applyScholarshipDiscount(
             @AuthenticationPrincipal CurrentUser currentUser,
             @RequestBody @Valid ScholarshipDiscountRequestDTO request
     ) {
-        return GlobalRes.success(scholarshipService.applyScholarshipDiscount(currentUser, request));
+        return GlobalResponseDTO.success(scholarshipService.applyScholarshipDiscount(currentUser, request));
     }
 
     @Operation(summary = "실제 납부액과 장학금 구분", description = "고지 금액에서 적용된 장학금 합계를 뺀 실납부액을 계산한다. STUDENT 본인 / ADMIN 관리 범위.")
@@ -57,18 +57,18 @@ public class ScholarshipController {
     })
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
     @PostMapping("/api/payment/payment-scholarship-allocation")
-    public GlobalRes<PaymentScholarshipAllocationResponseDTO> getPaymentScholarshipAllocation(
+    public GlobalResponseDTO<PaymentScholarshipAllocationResponseDTO> getPaymentScholarshipAllocation(
             @AuthenticationPrincipal CurrentUser currentUser,
             @RequestBody @Valid PaymentScholarshipAllocationRequestDTO request
     ) {
-        return GlobalRes.success(scholarshipService.calculateAllocation(currentUser, request));
+        return GlobalResponseDTO.success(scholarshipService.calculateAllocation(currentUser, request));
     }
 
     @Operation(summary = "내 장학금 수혜 내역", description = "STUDENT 본인이 받은 모든 학기의 장학금을 학기 ID와 함께 조회한다. 학기 선택 화면에서 종류·금액을 보여주는 용도.")
     @ApiResponse(responseCode = "200", description = "조회 성공")
     @PreAuthorize("hasRole('STUDENT')")
     @GetMapping("/api/payment/me/scholarships")
-    public GlobalRes<List<MyScholarshipResponseDTO>> getMyScholarships(@AuthenticationPrincipal CurrentUser student) {
-        return GlobalRes.success(scholarshipService.getMyScholarships(student));
+    public GlobalResponseDTO<List<MyScholarshipResponseDTO>> getMyScholarships(@AuthenticationPrincipal CurrentUser student) {
+        return GlobalResponseDTO.success(scholarshipService.getMyScholarships(student));
     }
 }

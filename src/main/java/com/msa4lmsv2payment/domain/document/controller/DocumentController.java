@@ -3,7 +3,7 @@ package com.msa4lmsv2payment.domain.document.controller;
 import com.msa4lmsv2payment.domain.document.request.PaymentReceiptRequestDTO;
 import com.msa4lmsv2payment.domain.document.response.DocumentResponseDTO;
 import com.msa4lmsv2payment.domain.document.service.DocumentService;
-import com.msa4lmsv2payment.global.response.GlobalRes;
+import com.msa4lmsv2payment.global.response.GlobalResponseDTO;
 import com.msa4lmsv2payment.global.security.CurrentUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -36,10 +36,10 @@ public class DocumentController {
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
     @ResponseStatus(HttpStatus.CREATED)
     @PostMapping("/api/payment/payment-receipts")
-    public GlobalRes<DocumentResponseDTO> issuePaymentReceipt(
+    public GlobalResponseDTO<DocumentResponseDTO> issuePaymentReceipt(
             @AuthenticationPrincipal CurrentUser currentUser,
             @RequestBody @Valid PaymentReceiptRequestDTO request
     ) {
-        return GlobalRes.success(documentService.issuePaymentReceipt(currentUser, request));
+        return GlobalResponseDTO.success(documentService.issuePaymentReceipt(currentUser, request));
     }
 }

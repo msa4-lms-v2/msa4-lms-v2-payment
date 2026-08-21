@@ -5,8 +5,8 @@ import com.msa4lmsv2payment.domain.tuitionbill.request.TuitionBillCreateRequestD
 import com.msa4lmsv2payment.domain.tuitionbill.response.TuitionBillResponseDTO;
 import com.msa4lmsv2payment.domain.tuitionbill.response.TuitionPaymentStatusResponseDTO;
 import com.msa4lmsv2payment.domain.tuitionbill.service.TuitionBillService;
-import com.msa4lmsv2payment.global.response.GlobalRes;
-import com.msa4lmsv2payment.global.response.PageRes;
+import com.msa4lmsv2payment.global.response.GlobalResponseDTO;
+import com.msa4lmsv2payment.global.response.PageResponseDTO;
 import com.msa4lmsv2payment.global.security.CurrentUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -42,11 +42,11 @@ public class TuitionBillController {
     @PreAuthorize("hasRole('ADMIN')")
     @ResponseStatus(HttpStatus.CREATED)
     @PostMapping("/api/payment/tuition-bills")
-    public GlobalRes<TuitionBillResponseDTO> createTuitionBill(
+    public GlobalResponseDTO<TuitionBillResponseDTO> createTuitionBill(
             @AuthenticationPrincipal CurrentUser admin,
             @RequestBody @Valid TuitionBillCreateRequestDTO request
     ) {
-        return GlobalRes.success(tuitionBillService.createTuitionBill(admin, request));
+        return GlobalResponseDTO.success(tuitionBillService.createTuitionBill(admin, request));
     }
 
     @Operation(summary = "학생 등록금 고지서 조회", description = "STUDENT 본인의 등록금 고지서 단건을 조회한다. STUDENT 본인 데이터만 접근 가능.")
@@ -57,31 +57,31 @@ public class TuitionBillController {
     })
     @PreAuthorize("hasRole('STUDENT')")
     @GetMapping("/api/payment/student-tuition-bills")
-    public GlobalRes<TuitionBillResponseDTO> getStudentTuitionBill(
+    public GlobalResponseDTO<TuitionBillResponseDTO> getStudentTuitionBill(
             @AuthenticationPrincipal CurrentUser student,
             @RequestParam Long tuitionBillId
     ) {
-        return GlobalRes.success(tuitionBillService.getStudentTuitionBill(student, tuitionBillId));
+        return GlobalResponseDTO.success(tuitionBillService.getStudentTuitionBill(student, tuitionBillId));
     }
 
     @Operation(summary = "관리자 등록금 목록 조회", description = "ADMIN이 상태별·페이지네이션으로 전체 등록금 고지 목록을 조회한다. ADMIN 관리 범위.")
     @ApiResponse(responseCode = "200", description = "조회 성공")
     @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/api/payment/tuition-bills")
-    public GlobalRes<PageRes<TuitionBillResponseDTO>> getAdminTuitionBills(
+    public GlobalResponseDTO<PageResponseDTO<TuitionBillResponseDTO>> getAdminTuitionBills(
             @RequestParam(required = false) TuitionBillStatus status,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
-        return GlobalRes.success(tuitionBillService.getAdminTuitionBills(status, page, size));
+        return GlobalResponseDTO.success(tuitionBillService.getAdminTuitionBills(status, page, size));
     }
 
     @Operation(summary = "학생별 등록금 조회", description = "STUDENT 본인의 등록금 고지 목록을 조회한다. STUDENT 본인 데이터만 접근 가능.")
     @ApiResponse(responseCode = "200", description = "조회 성공")
     @PreAuthorize("hasRole('STUDENT')")
     @GetMapping("/api/payment/me/tuition-bills")
-    public GlobalRes<List<TuitionBillResponseDTO>> getStudentTuition(@AuthenticationPrincipal CurrentUser currentUser) {
-        return GlobalRes.success(tuitionBillService.getMyTuitionBills(currentUser));
+    public GlobalResponseDTO<List<TuitionBillResponseDTO>> getStudentTuition(@AuthenticationPrincipal CurrentUser currentUser) {
+        return GlobalResponseDTO.success(tuitionBillService.getMyTuitionBills(currentUser));
     }
 
     @Operation(summary = "등록금 납부 상태 조회", description = "등록금 고지 하나의 납부 상태를 조회한다. STUDENT 본인 / ADMIN 관리 범위.")
@@ -92,10 +92,10 @@ public class TuitionBillController {
     })
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
     @GetMapping("/api/payment/tuition-payment-status")
-    public GlobalRes<TuitionPaymentStatusResponseDTO> getTuitionPaymentStatus(
+    public GlobalResponseDTO<TuitionPaymentStatusResponseDTO> getTuitionPaymentStatus(
             @AuthenticationPrincipal CurrentUser currentUser,
             @RequestParam Long tuitionBillId
     ) {
-        return GlobalRes.success(tuitionBillService.getTuitionPaymentStatus(currentUser, tuitionBillId));
+        return GlobalResponseDTO.success(tuitionBillService.getTuitionPaymentStatus(currentUser, tuitionBillId));
     }
 }

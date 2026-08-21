@@ -1,7 +1,7 @@
 package com.msa4lmsv2payment.global.security;
 
 import com.msa4lmsv2payment.global.response.CustomResponseCode;
-import com.msa4lmsv2payment.global.response.GlobalRes;
+import com.msa4lmsv2payment.global.response.GlobalResponseDTO;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +27,6 @@ public class GatewayAuthenticationEntryPoint implements AuthenticationEntryPoint
         response.setCharacterEncoding("UTF-8");
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.getWriter().write(
-                objectMapper.writeValueAsString(GlobalRes.fail(code, null)));
+                objectMapper.writeValueAsString(GlobalResponseDTO.fail(code, null)));
     }
 }

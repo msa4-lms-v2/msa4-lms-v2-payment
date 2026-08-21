@@ -3,7 +3,7 @@ package com.msa4lmsv2payment.domain.virtualaccount.controller;
 import com.msa4lmsv2payment.domain.virtualaccount.request.VirtualAccountIssueRequestDTO;
 import com.msa4lmsv2payment.domain.virtualaccount.response.VirtualAccountResponseDTO;
 import com.msa4lmsv2payment.domain.virtualaccount.service.VirtualAccountService;
-import com.msa4lmsv2payment.global.response.GlobalRes;
+import com.msa4lmsv2payment.global.response.GlobalResponseDTO;
 import com.msa4lmsv2payment.global.security.CurrentUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -36,10 +36,10 @@ public class VirtualAccountController {
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
     @ResponseStatus(HttpStatus.CREATED)
     @PostMapping("/api/payment/virtual-accounts")
-    public GlobalRes<VirtualAccountResponseDTO> issueVirtualAccount(
+    public GlobalResponseDTO<VirtualAccountResponseDTO> issueVirtualAccount(
             @AuthenticationPrincipal CurrentUser currentUser,
             @RequestBody @Valid VirtualAccountIssueRequestDTO request
     ) {
-        return GlobalRes.success(virtualAccountService.issueVirtualAccount(currentUser, request));
+        return GlobalResponseDTO.success(virtualAccountService.issueVirtualAccount(currentUser, request));
     }
 }

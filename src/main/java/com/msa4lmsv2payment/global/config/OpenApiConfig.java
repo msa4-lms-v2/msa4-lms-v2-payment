@@ -1,6 +1,6 @@
 package com.msa4lmsv2payment.global.config;
 
-import com.msa4lmsv2payment.global.response.GlobalRes;
+import com.msa4lmsv2payment.global.response.GlobalResponseDTO;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.Operation;
@@ -54,7 +54,7 @@ public class OpenApiConfig {
                                 외부 클라이언트가 직접 호출하는 서비스가 아니다. SCG가 JWT를 검증한 뒤 사용자 컨텍스트(X-User-Id/X-User-Role)를 전달한다.
                                 이 서비스는 인프라 단에서 Gateway 외의 접근이 차단된다는 전제로, 두 헤더 값을 서명 없이 그대로 신뢰한다.
 
-                                응답은 GlobalRes(code, message, data) 형식이다. 성공은 00/SUCCESS, 실패는 EXX 코드와 enum 메시지를 사용한다.
+                                응답은 GlobalResponseDTO(code, message, data) 형식이다. 성공은 00/SUCCESS, 실패는 EXX 코드와 enum 메시지를 사용한다.
                                 Idempotency-Key가 필요한 API는 1~100자를 받으며, 완료된 동일 요청은 저장된 응답을 재생하고 하위 업무나 PG를 다시 호출하지 않는다.
                                 """)
                         .version("v1"))
@@ -124,7 +124,7 @@ public class OpenApiConfig {
         return new Content().addMediaType(
                 org.springframework.http.MediaType.APPLICATION_JSON_VALUE,
                 new io.swagger.v3.oas.models.media.MediaType()
-                        .example(new GlobalRes<Void>(code, message, null)));
+                        .example(new GlobalResponseDTO<Void>(code, message, null)));
     }
 
     private SecurityScheme headerScheme(String headerName, String description) {

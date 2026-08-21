@@ -4,7 +4,7 @@ import com.msa4lmsv2payment.domain.installment.request.InstallmentPlanCreateRequ
 import com.msa4lmsv2payment.domain.installment.request.InstallmentPlanReviewRequestDTO;
 import com.msa4lmsv2payment.domain.installment.response.InstallmentPlanResponseDTO;
 import com.msa4lmsv2payment.domain.installment.service.InstallmentPlanService;
-import com.msa4lmsv2payment.global.response.GlobalRes;
+import com.msa4lmsv2payment.global.response.GlobalResponseDTO;
 import com.msa4lmsv2payment.global.security.CurrentUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -45,11 +45,11 @@ public class InstallmentPlanController {
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
     @ResponseStatus(HttpStatus.CREATED)
     @PostMapping("/api/payment/installment-plans")
-    public GlobalRes<InstallmentPlanResponseDTO> createInstallmentPlan(
+    public GlobalResponseDTO<InstallmentPlanResponseDTO> createInstallmentPlan(
             @AuthenticationPrincipal CurrentUser currentUser,
             @RequestBody @Valid InstallmentPlanCreateRequestDTO request
     ) {
-        return GlobalRes.success(installmentPlanService.createPlan(currentUser, request));
+        return GlobalResponseDTO.success(installmentPlanService.createPlan(currentUser, request));
     }
 
     @Operation(summary = "분할납부 계획 조회", description = "등록금 고지 1건의 분할납부 신청·계획과 회차별 상태를 조회한다. STUDENT 본인 / ADMIN 관리 범위.")
@@ -60,11 +60,11 @@ public class InstallmentPlanController {
     })
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
     @GetMapping("/api/payment/installment-plans")
-    public GlobalRes<InstallmentPlanResponseDTO> getInstallmentPlan(
+    public GlobalResponseDTO<InstallmentPlanResponseDTO> getInstallmentPlan(
             @AuthenticationPrincipal CurrentUser currentUser,
             @RequestParam Long tuitionBillId
     ) {
-        return GlobalRes.success(installmentPlanService.getPlan(currentUser, tuitionBillId));
+        return GlobalResponseDTO.success(installmentPlanService.getPlan(currentUser, tuitionBillId));
     }
 
     @Operation(summary = "분할납부 신청 심사", description = "ADMIN이 분할납부 신청을 승인·반려한다. 승인해야만(ACTIVE) 학생이 회차 결제를 시작할 수 있다.")
@@ -77,11 +77,11 @@ public class InstallmentPlanController {
     })
     @PreAuthorize("hasRole('ADMIN')")
     @PatchMapping("/api/payment/installment-plans/{planId}/review")
-    public GlobalRes<InstallmentPlanResponseDTO> reviewInstallmentPlan(
+    public GlobalResponseDTO<InstallmentPlanResponseDTO> reviewInstallmentPlan(
             @AuthenticationPrincipal CurrentUser admin,
             @PathVariable Long planId,
             @RequestBody @Valid InstallmentPlanReviewRequestDTO request
     ) {
-        return GlobalRes.success(installmentPlanService.reviewPlan(admin, planId, request));
+        return GlobalResponseDTO.success(installmentPlanService.reviewPlan(admin, planId, request));
     }
 }
