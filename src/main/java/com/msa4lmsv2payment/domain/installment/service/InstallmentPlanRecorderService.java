@@ -14,11 +14,11 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 분할납부 계획과 회차 항목 저장, 감사 로그 기록을 하나의 트랜잭션으로 묶는다(TuitionBillRecorder와 동일 패턴).
+ * 분할납부 계획과 회차 항목 저장, 감사 로그 기록을 하나의 트랜잭션으로 묶는다(TuitionBillRecorderService와 동일 패턴).
  */
 @Component
 @RequiredArgsConstructor
-public class InstallmentPlanRecorder {
+public class InstallmentPlanRecorderService {
 
     private final InstallmentPlanRepository installmentPlanRepository;
     private final InstallmentPlanItemRepository installmentPlanItemRepository;

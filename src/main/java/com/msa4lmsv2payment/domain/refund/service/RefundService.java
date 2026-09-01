@@ -1,6 +1,5 @@
 package com.msa4lmsv2payment.domain.refund.service;
 
-import com.msa4lmsv2payment.domain.refund.WithdrawalRefundRateCalculator;
 import com.msa4lmsv2payment.domain.refund.entity.Refund;
 import com.msa4lmsv2payment.domain.refund.entity.RefundStatus;
 import com.msa4lmsv2payment.domain.refund.entity.RefundType;
@@ -43,12 +42,12 @@ public class RefundService {
     private final TuitionBillService tuitionBillService;
     private final VirtualAccountService virtualAccountService;
     private final AcademicClient academicClient;
-    private final WithdrawalRefundRateCalculator withdrawalRefundRateCalculator;
-    private final RefundRecorder refundRecorder;
+    private final WithdrawalRefundRateCalculatorService withdrawalRefundRateCalculator;
+    private final RefundRecorderService refundRecorder;
 
-    // SCRUM-63: 자퇴 예상 환불금 조회 (조회만, 저장 없음)
-    // resolveWithdrawalRefundRate가 Academic을 호출해 트랜잭션 밖에서 실행한다(B3번) - applyWithdrawalRefundRate(166)와
-    // 같은 private 헬퍼를 쓰면서도 이 조회 경로만 놓쳤던 걸 뒤늦게 발견해 맞췄다.
+    // 자퇴 예상 환불금 조회 (조회만, 저장 없음)
+    // resolveWithdrawalRefundRate가 Academic을 호출해 트랜잭션 밖에서 실행한다.
+    // applyWithdrawalRefundRate와 같은 private 헬퍼를 공유하므로 이 조회 경로도 동일하게 적용한다.
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public WithdrawalRefundEstimateResponseDTO estimateWithdrawalRefund(
             CurrentUser currentUser, Long tuitionBillId, Long withdrawalId
@@ -61,8 +60,8 @@ public class RefundService {
         return new WithdrawalRefundEstimateResponseDTO(tuitionBill.getId(), refundableBase, rate, estimatedAmount);
     }
 
-    // SCRUM-166: 자퇴 처리일 기준 환불률 적용 (동일 고지에 재요청 시 새로 만들지 않고 기존 REQUESTED 건의 비율만 갱신 - 비기능 #19)
-    // Academic 호출 동안 DB 커넥션을 붙잡지 않도록 트랜잭션 밖에서 실행한다(B3번).
+    // 자퇴 처리일 기준 환불률 적용. 동일 고지에 재요청 시 새로 만들지 않고 기존 REQUESTED 건의 비율만 갱신해 중복 실행을 막는다.
+    // Academic 호출 동안 DB 커넥션을 붙잡지 않도록 트랜잭션 밖에서 실행한다.
     // findByTuitionBillIdAndRefundType()가 반환한 엔티티는 그 조회 자체의 트랜잭션이 끝나며 detach되므로,
     // 변경 후 반드시 save()를 다시 호출해야 반영된다(더티체킹에 기대지 않는다).
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
@@ -83,7 +82,7 @@ public class RefundService {
         return RefundResponseDTO.from(refund);
     }
 
-    // 성공 결제 합계에서 성공 환불 합계를 뺀 값만 환불 대상이다(수정사항.md 4.5 확정 공식) - 장학금은 결제 자체가
+    // 성공 결제 합계에서 성공 환불 합계를 뺀 값만 환불 대상이다. 장학금은 결제 자체가
     // 아니므로 자동 제외되고, 이미 환불된 금액을 다시 환불 기준액에 포함하지 않는다.
     private BigDecimal refundableBase(Long tuitionBillId) {
         BigDecimal succeededPayments = paymentRepository.sumSucceededAmount(tuitionBillId);
@@ -91,9 +90,9 @@ public class RefundService {
         return succeededPayments.subtract(succeededRefunds);
     }
 
-    // SCRUM-175: 가상계좌 환불 요청 (55에서 발급한 계좌를 166에서 만든 환불 요청에 연결)
+    // 가상계좌 환불 요청 - 가상계좌 발급에서 만든 계좌를 자퇴 환불률 적용에서 만든 환불 요청에 연결한다.
     // 실제 입금 확인·토스 환불 접수 호출은 입금 검증 인프라(virtual_account_deposits)가 생기는 week-4에서 이어간다 -
-    // week-2 시점에는 "이 계좌로 환불하겠다"는 연결까지만 한다(MY-PLAN_payment.md 7-4절).
+    // 지금은 "이 계좌로 환불하겠다"는 연결까지만 한다.
     @Transactional
     public RefundResponseDTO requestVirtualAccountRefund(CurrentUser currentUser, VirtualAccountRefundRequestDTO request) {
         TuitionBill tuitionBill = tuitionBillService.getOwnedTuitionBillOrThrow(currentUser, request.tuitionBillId());
@@ -107,8 +106,8 @@ public class RefundService {
         return RefundResponseDTO.from(refund);
     }
 
-    // SCRUM-177: 실패한 환불 재시도 - FAILED 상태만 재시도할 수 있고, MAX_RETRY_ATTEMPTS를 넘으면 최종 실패로 본다(비기능 #26).
-    // 소유권 검증이 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다(B3번).
+    // 실패한 환불 재시도 - FAILED 상태만 재시도할 수 있고, MAX_RETRY_ATTEMPTS를 넘으면 최종 실패로 본다.
+    // 소유권 검증이 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다.
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public RefundResponseDTO retryFailedRefund(CurrentUser currentUser, RefundRetryRequestDTO request) {
         TuitionBill tuitionBill = tuitionBillService.getOwnedTuitionBillOrThrow(currentUser, request.tuitionBillId());

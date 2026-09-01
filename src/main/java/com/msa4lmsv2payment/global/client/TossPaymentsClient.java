@@ -66,7 +66,7 @@ public class TossPaymentsClient {
     }
 
     /**
-     * 토스페이먼츠 가상계좌 발급 API(POST /v1/virtual-accounts) - MY-PLAN_payment.md 7-4절.
+     * 토스페이먼츠 가상계좌 발급 API(POST /v1/virtual-accounts).
      * 입금 Webhook 없이 계좌 발급 자체만 완결되는 API다.
      */
     public TossVirtualAccountIssueResponse issueVirtualAccount(String orderId, String orderName, BigDecimal amount,
@@ -104,7 +104,7 @@ public class TossPaymentsClient {
     }
 
     /**
-     * 결제 승인(POST /v1/payments/confirm) - MY-PLAN_payment.md 10-2절, SCRUM-115.
+     * 결제 승인(POST /v1/payments/confirm).
      * 4xx 오류 응답은 성공 DTO와 구조가 다르므로 업무 오류로 변환하고 로컬 결제 상태를 변경하지 않는다.
      */
     public TossPaymentResponse confirmPayment(String paymentKey, String orderId, BigDecimal amount, String idempotencyKey) {
@@ -133,7 +133,7 @@ public class TossPaymentsClient {
     }
 
     /**
-     * 결제 단건 조회(GET /v1/payments/{paymentKey}) - SCRUM-110, confirm 호출이 타임아웃됐을 때
+     * 결제 단건 조회(GET /v1/payments/{paymentKey}) - confirm 호출이 타임아웃됐을 때
      * 실제로는 처리됐는지 재확인하는 복구용.
      */
     public TossPaymentResponse getPayment(String paymentKey) {

@@ -13,13 +13,13 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 
 /**
- * 4.4: 결제 확정 직전에 현재 순납부액을 다시 계산해 초과 납부를 거부한다.
+ * 결제 확정 직전에 현재 순납부액을 다시 계산해 초과 납부를 거부한다.
  * 별도 Bean으로 분리한 이유: PaymentService에서 self-invocation으로 호출하면
  * @Transactional이 프록시를 거치지 않아 무시되므로, 락이 걸린 트랜잭션 경계를 보장하려면 별도 Bean이 필요하다.
  */
 @Component
 @RequiredArgsConstructor
-public class TuitionOverpaymentGuard {
+public class TuitionOverpaymentGuardService {
 
     private final TuitionBillRepository tuitionBillRepository;
     private final PaymentRepository paymentRepository;

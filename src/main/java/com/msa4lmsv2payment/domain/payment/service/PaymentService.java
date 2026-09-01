@@ -50,19 +50,19 @@ public class PaymentService {
     private final TuitionBillService tuitionBillService;
     private final ScholarshipService scholarshipService;
     private final TossPaymentsClient tossPaymentsClient;
-    private final PaymentResultRecorder paymentResultRecorder;
-    private final TuitionOverpaymentGuard tuitionOverpaymentGuard;
+    private final PaymentResultRecorderService paymentResultRecorder;
+    private final TuitionOverpaymentGuardService tuitionOverpaymentGuard;
     private final InstallmentPlanService installmentPlanService;
 
-    // SCRUM-51: 결제 금액 검증
+    // 결제 금액 검증
     public PaymentAmountValidationResponseDTO validateAmount(CurrentUser currentUser, PaymentAmountValidationRequestDTO request) {
         BigDecimal expected = expectedAmount(currentUser, request.tuitionBillId());
         boolean valid = expected.compareTo(request.amount()) == 0;
         return new PaymentAmountValidationResponseDTO(valid, expected);
     }
 
-    // SCRUM-111: 결제창 연동 - payments 행을 REQUESTED로 미리 만들고 체크아웃 데이터를 돌려준다.
-    // 소유권 검증(getOwnedTuitionBillOrThrow)이 STUDENT 호출 시 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다(B3번).
+    // 결제창 연동 - payments 행을 REQUESTED로 미리 만들고 체크아웃 데이터를 돌려준다.
+    // 소유권 검증(getOwnedTuitionBillOrThrow)이 STUDENT 호출 시 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다.
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public CheckoutSessionResponseDTO createCheckoutSession(CurrentUser currentUser, CheckoutSessionRequestDTO request) {
         TuitionBill tuitionBill = tuitionBillService.getOwnedTuitionBillOrThrow(currentUser, request.tuitionBillId());
@@ -84,7 +84,8 @@ public class PaymentService {
         return new CheckoutSessionResponseDTO(payment.getId(), ORDER_ID_PREFIX + payment.getId(), "등록금 납부", payment.getAmount());
     }
 
-    // SCRUM-115: PG 결제 요청 - 51을 내부 재사용해 위조 금액을 거른 뒤 토스 confirm을 호출하고, 결과를 그 자리에서 저장한다(110 역할 포함).
+    // PG 결제 요청 - 요청 금액을 저장된 결제 금액과 다시 대조해 위조 금액을 거른 뒤 토스 confirm을 호출하고,
+    // 결과 저장까지 applyPaymentResult로 그 자리에서 처리한다(결제 성공·실패 처리와 같은 저장 로직을 공유한다).
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public PaymentResponseDTO requestPgPayment(CurrentUser currentUser, PgPaymentRequestDTO request, String idempotencyKey) {
         Payment payment = findByOrderIdOrThrow(request.orderId());
@@ -101,7 +102,7 @@ public class PaymentService {
         return applyPaymentResult(currentUser.id(), payment, tossResponse, request.orderId(), request.paymentKey());
     }
 
-    // SCRUM-110: 결제 성공·실패 처리 - confirm 호출이 타임아웃됐을 때 ADMIN이 토스 실제 상태로 DB를 동기화하는 복구용.
+    // 결제 성공·실패 처리 - confirm 호출이 타임아웃됐을 때 ADMIN이 토스 실제 상태로 DB를 동기화하는 복구용.
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public PaymentResponseDTO syncPaymentResult(CurrentUser admin, Long paymentId, PaymentResultSyncRequestDTO request) {
         Payment payment = paymentRepository.findById(paymentId)
@@ -145,8 +146,8 @@ public class PaymentService {
         }
     }
 
-    // SCRUM-112: 납부 상태 반영(쓰기) - SUCCEEDED 결제 합계로 tuition_bills.status를 재계산한다.
-    // 소유권 검증이 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다(B3번).
+    // 납부 상태 반영(쓰기) - SUCCEEDED 결제 합계로 tuition_bills.status를 재계산한다.
+    // 소유권 검증이 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다.
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void recalculateTuitionStatus(CurrentUser currentUser, PaymentStatusRequestDTO request) {
         TuitionBill tuitionBill = tuitionBillService.getOwnedTuitionBillOrThrow(currentUser, request.tuitionBillId());
@@ -165,13 +166,13 @@ public class PaymentService {
     }
 
     /**
-     * SCRUM-114 - 다른 도메인(document 등)이 납부 완료 여부를 확인해야 할 때 이 공개 메서드를 거친다(B1번 패키지 경계).
+     * 다른 도메인(document 등)이 납부 완료 여부를 확인해야 할 때 이 공개 메서드를 거친다.
      */
     public boolean hasSucceededPayment(Long tuitionBillId) {
         return !paymentRepository.findByTuitionBillIdAndStatus(tuitionBillId, PaymentStatus.SUCCEEDED).isEmpty();
     }
 
-    // SCRUM-113: 납부 현황 반영(읽기)
+    // 납부 현황 반영(읽기)
     public PaymentSummaryResponseDTO getPaymentSummary(CurrentUser currentUser, Long tuitionBillId) {
         TuitionBill tuitionBill = tuitionBillService.getOwnedTuitionBillOrThrow(currentUser, tuitionBillId);
         PaymentScholarshipAllocationResponseDTO allocation = allocation(currentUser, tuitionBillId);
@@ -184,7 +185,7 @@ public class PaymentService {
     }
 
     // 학생 본인의 일괄납부/분할납부 이력 조회(등록금 신청 내역 화면용)
-    // resolveStudentId가 Academic을 호출해 트랜잭션 밖에서 실행한다(B3번).
+    // resolveStudentId가 Academic을 호출해 트랜잭션 밖에서 실행한다.
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public List<PaymentHistoryResponseDTO> getMyPaymentHistory(CurrentUser currentUser, PaymentStatus status) {
         Long studentId = tuitionBillService.resolveStudentId(currentUser);

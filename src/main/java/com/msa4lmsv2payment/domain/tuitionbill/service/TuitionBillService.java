@@ -29,11 +29,11 @@ public class TuitionBillService {
     private final TuitionBillRepository tuitionBillRepository;
     private final TuitionBillQueryRepository tuitionBillQueryRepository;
     private final AcademicClient academicClient;
-    private final TuitionBillRecorder tuitionBillRecorder;
+    private final TuitionBillRecorderService tuitionBillRecorder;
 
-    // SCRUM-43: 관리자 등록금 고지
-    // Academic 호출(academicClient) 동안 DB 커넥션을 붙잡지 않도록 트랜잭션 밖에서 실행한다(B3번).
-    // 저장과 감사 로그는 tuitionBillRecorder가 하나의 트랜잭션으로 묶는다(4.6).
+    // 관리자 등록금 고지
+    // Academic 호출(academicClient) 동안 DB 커넥션을 붙잡지 않도록 트랜잭션 밖에서 실행한다.
+    // 저장과 감사 로그는 tuitionBillRecorder가 하나의 트랜잭션으로 묶는다.
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public TuitionBillResponseDTO createTuitionBill(CurrentUser admin, TuitionBillCreateRequestDTO request) {
         academicClient.findStudent(request.studentId());
@@ -51,8 +51,8 @@ public class TuitionBillService {
         return TuitionBillResponseDTO.from(tuitionBillRecorder.saveWithAudit(admin.id(), tuitionBill));
     }
 
-    // SCRUM-77: 학생 등록금 고지서 조회 (43이 만든 고지 단건을 학생이 확인)
-    // getOwnedTuitionBillOrThrow가 STUDENT 호출 시 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다(B3번).
+    // 학생 등록금 고지서 조회 - 관리자 등록금 고지가 만든 고지 단건을 학생이 확인한다.
+    // getOwnedTuitionBillOrThrow가 STUDENT 호출 시 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다.
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public TuitionBillResponseDTO getStudentTuitionBill(CurrentUser student, Long tuitionBillId) {
         return TuitionBillResponseDTO.from(getOwnedTuitionBillOrThrow(student, tuitionBillId));
@@ -72,7 +72,7 @@ public class TuitionBillService {
         return new PageResponseDTO<>(items, totalCount, safePage, clampedSize, hasNext);
     }
 
-    // resolveStudentId가 Academic을 호출해 트랜잭션 밖에서 실행한다(B3번).
+    // resolveStudentId가 Academic을 호출해 트랜잭션 밖에서 실행한다.
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public List<TuitionBillResponseDTO> getMyTuitionBills(CurrentUser currentUser) {
         Long studentId = resolveStudentId(currentUser);
@@ -81,7 +81,7 @@ public class TuitionBillService {
                 .toList();
     }
 
-    // getOwnedTuitionBillOrThrow가 STUDENT 호출 시 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다(B3번).
+    // getOwnedTuitionBillOrThrow가 STUDENT 호출 시 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다.
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public TuitionPaymentStatusResponseDTO getTuitionPaymentStatus(CurrentUser currentUser, Long tuitionBillId) {
         TuitionBill tuitionBill = getOwnedTuitionBillOrThrow(currentUser, tuitionBillId);
@@ -90,8 +90,8 @@ public class TuitionBillService {
 
     /**
      * ADMIN은 전체 고지에, STUDENT는 본인 고지에만 접근 가능하도록 검증한 뒤 엔티티를 반환한다.
-     * 다른 도메인(scholarship 등)이 tuition_bill 소유권을 확인해야 할 때도 이 메서드를 거친다(B1번 패키지 경계).
-     * STUDENT 호출 시 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다(B3번) - 다른 서비스가 빈 경계를 넘어(프록시를 거쳐)
+     * 다른 도메인(scholarship 등)이 tuition_bill 소유권을 확인해야 할 때도 이 메서드를 거친다.
+     * STUDENT 호출 시 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다. 다른 서비스가 빈 경계를 넘어(프록시를 거쳐)
      * 이 메서드를 직접 호출할 때는 호출부 자신의 propagation 설정과 무관하게 이 메서드 자신의 propagation이 적용된다.
      */
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
@@ -114,7 +114,7 @@ public class TuitionBillService {
     }
 
     /**
-     * 5.1: 동시 장학금 적용처럼 합계 재계산 후 저장까지 직렬화해야 하는 흐름이 이 행을 잠근 채로 호출한다.
+     * 동시 장학금 적용처럼 합계 재계산 후 저장까지 직렬화해야 하는 흐름이 이 행을 잠근 채로 호출한다.
      * 호출부의 트랜잭션에 그대로 참여하므로(REQUIRED), 호출부가 이미 @Transactional이어야 락이 유지된다.
      */
     public TuitionBill getTuitionBillForUpdateOrThrow(Long tuitionBillId) {
@@ -123,14 +123,14 @@ public class TuitionBillService {
     }
 
     /**
-     * SCRUM-112 - 다른 도메인(payment 등)이 고지 상태를 바꿔야 할 때 이 공개 메서드를 거친다(B1번 패키지 경계).
+     * 다른 도메인(payment 등)이 고지 상태를 바꿔야 할 때 이 공개 메서드를 거친다.
      */
     @Transactional
     public void changeStatus(Long tuitionBillId, TuitionBillStatus status) {
         getTuitionBillOrThrow(tuitionBillId).changeStatus(status);
     }
 
-    // Academic 호출 동안 DB 커넥션을 붙잡지 않도록 트랜잭션 밖에서 실행한다(B3번).
+    // Academic 호출 동안 DB 커넥션을 붙잡지 않도록 트랜잭션 밖에서 실행한다.
     // users.id(CurrentUser.id())를 students.id로 변환하는 유일한 통로 - 다른 도메인도 본인 학번이 필요하면 이 메서드를 거친다.
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public Long resolveStudentId(CurrentUser currentUser) {

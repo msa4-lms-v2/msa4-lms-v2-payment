@@ -12,7 +12,7 @@ import java.util.Map;
 
 @Component
 @RequiredArgsConstructor
-public class PaymentResultRecorder {
+public class PaymentResultRecorderService {
 
     private final PaymentRepository paymentRepository;
     private final AuditLogRecorder auditLogRecorder;

@@ -16,8 +16,8 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import java.time.LocalDateTime;
 
 /**
- * 결제·환불·증명서 폐기 등 업무 액션의 감사 로그 - MY-PLAN_payment.md 7-6절.
- * Auth·Academic도 각자 동일 스키마의 audit_logs를 소유한다(docs-v2/MSA-LMS_ARCHITECTURE.md 5절 설계 결정 9번).
+ * 결제·환불·증명서 폐기 등 업무 액션의 감사 로그.
+ * Auth·Academic도 각자 동일 스키마의 audit_logs 테이블을 독립적으로 소유하며, 이 테이블과 공유하지 않는다.
  */
 @Entity
 @Table(name = "audit_logs")

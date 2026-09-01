@@ -11,11 +11,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Map;
 
 /**
- * 4.6: 가상계좌 저장과 감사 로그 기록을 하나의 트랜잭션으로 묶는다.
+ * 가상계좌 저장과 감사 로그 기록을 하나의 트랜잭션으로 묶는다.
  */
 @Component
 @RequiredArgsConstructor
-public class VirtualAccountRecorder {
+public class VirtualAccountRecorderService {
 
     private final VirtualAccountRepository virtualAccountRepository;
     private final AuditLogRecorder auditLogRecorder;

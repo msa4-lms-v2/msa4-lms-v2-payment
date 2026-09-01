@@ -42,10 +42,10 @@ public class ScholarshipApplicationService {
     private final ScholarshipApplicationPeriodRepository scholarshipApplicationPeriodRepository;
     private final TuitionBillService tuitionBillService;
     private final ScholarshipService scholarshipService;
-    private final ScholarshipApplicationRecorder scholarshipApplicationRecorder;
+    private final ScholarshipApplicationRecorderService scholarshipApplicationRecorder;
     private final AuditLogRecorder auditLogRecorder;
 
-    // 소유권 검증과 신청기간 판단(고지의 semesterId 확인)이 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다(B3번).
+    // 소유권 검증과 신청기간 판단(고지의 semesterId 확인)이 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다.
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public ScholarshipApplicationResponseDTO createApplication(CurrentUser student, ScholarshipApplicationCreateRequestDTO request) {
         TuitionBill tuitionBill = tuitionBillService.getOwnedTuitionBillOrThrow(student, request.tuitionBillId());
@@ -68,7 +68,7 @@ public class ScholarshipApplicationService {
         return ScholarshipApplicationResponseDTO.from(scholarshipApplicationRecorder.saveWithAudit(student.id(), application));
     }
 
-    // resolveStudentId가 Academic을 호출해 트랜잭션 밖에서 실행한다(B3번).
+    // resolveStudentId가 Academic을 호출해 트랜잭션 밖에서 실행한다.
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public List<ScholarshipApplicationResponseDTO> getMyApplications(CurrentUser student) {
         Long studentId = tuitionBillService.resolveStudentId(student);

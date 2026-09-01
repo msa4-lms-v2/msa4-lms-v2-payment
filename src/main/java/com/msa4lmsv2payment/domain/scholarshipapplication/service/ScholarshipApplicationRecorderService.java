@@ -11,11 +11,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Map;
 
 /**
- * 장학금 신청 저장과 감사 로그 기록을 하나의 트랜잭션으로 묶는다(TuitionBillRecorder와 동일 패턴).
+ * 장학금 신청 저장과 감사 로그 기록을 하나의 트랜잭션으로 묶는다(TuitionBillRecorderService와 동일 패턴).
  */
 @Component
 @RequiredArgsConstructor
-public class ScholarshipApplicationRecorder {
+public class ScholarshipApplicationRecorderService {
 
     private final ScholarshipApplicationRepository scholarshipApplicationRepository;
     private final AuditLogRecorder auditLogRecorder;

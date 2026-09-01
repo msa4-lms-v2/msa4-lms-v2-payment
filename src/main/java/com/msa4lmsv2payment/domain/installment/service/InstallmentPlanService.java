@@ -45,11 +45,11 @@ public class InstallmentPlanService {
     private final InstallmentPlanItemRepository installmentPlanItemRepository;
     private final TuitionBillService tuitionBillService;
     private final ScholarshipService scholarshipService;
-    private final InstallmentPlanRecorder installmentPlanRecorder;
+    private final InstallmentPlanRecorderService installmentPlanRecorder;
     private final AuditLogRecorder auditLogRecorder;
 
     // 회차 금액은 항상 서버가 실납부액(고지금액-장학금)을 회차 수로 나눠 계산한다 - 클라이언트가 회차 금액을 지정할 수 없다(위조 방지).
-    // 소유권 검증이 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다(B3번).
+    // 소유권 검증이 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다.
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public InstallmentPlanResponseDTO createPlan(CurrentUser currentUser, InstallmentPlanCreateRequestDTO request) {
         TuitionBill tuitionBill = tuitionBillService.getOwnedTuitionBillOrThrow(currentUser, request.tuitionBillId());
@@ -68,7 +68,7 @@ public class InstallmentPlanService {
         return toResponse(saved);
     }
 
-    // 소유권 검증이 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다(B3번).
+    // 소유권 검증이 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다.
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public InstallmentPlanResponseDTO getPlan(CurrentUser currentUser, Long tuitionBillId) {
         tuitionBillService.getOwnedTuitionBillOrThrow(currentUser, tuitionBillId);
@@ -103,7 +103,7 @@ public class InstallmentPlanService {
     }
 
     /**
-     * SCRUM(분할납부) - PaymentService가 결제창 연동 시 청구할 회차 금액을 알아야 할 때 이 공개 메서드를 거친다(B1번 패키지 경계).
+     * 분할납부 - PaymentService가 결제창 연동 시 청구할 회차 금액을 알아야 할 때 이 공개 메서드를 거친다.
      * 결제 행을 만들기 전 조회 전용으로 쓰며, 이 시점에는 아직 결제와 연결하지 않는다(엔티티는 변경하지 않음).
      * 계획이 ACTIVE(승인됨)가 아니면 거부한다 - 신청만으로는 분할납부를 시작할 수 없다.
      */
@@ -133,7 +133,7 @@ public class InstallmentPlanService {
     }
 
     /**
-     * PaymentResultRecorder가 결제 성공을 저장하는 같은 트랜잭션에서 회차를 완료 처리할 때 이 공개 메서드를 거친다(B1번 패키지 경계).
+     * PaymentResultRecorderService가 결제 성공을 저장하는 같은 트랜잭션에서 회차를 완료 처리할 때 이 공개 메서드를 거친다.
      * installmentPlanItemId가 null이면(일반 전액 결제) 아무 것도 하지 않는다.
      */
     @Transactional
