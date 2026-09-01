@@ -30,8 +30,8 @@ public class DocumentService {
     private final TuitionBillService tuitionBillService;
     private final PaymentService paymentService;
 
-    // SCRUM-114: 납부 확인서 - 실제 납부 이력이 있는 고지에만 발급한다.
-    // 소유권 검증이 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다(B3번).
+    // 납부 확인서 - 실제 납부 이력이 있는 고지에만 발급한다.
+    // 소유권 검증이 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다.
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public DocumentResponseDTO issuePaymentReceipt(CurrentUser currentUser, PaymentReceiptRequestDTO request) {
         TuitionBill tuitionBill = tuitionBillService.getOwnedTuitionBillOrThrow(currentUser, request.tuitionBillId());
