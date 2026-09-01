@@ -12,8 +12,9 @@ import com.msa4lmsv2payment.domain.payment.response.PaymentHistoryResponseDTO;
 import com.msa4lmsv2payment.domain.payment.response.PaymentResponseDTO;
 import com.msa4lmsv2payment.domain.payment.response.PaymentSummaryResponseDTO;
 import com.msa4lmsv2payment.domain.payment.service.PaymentService;
-import com.msa4lmsv2payment.global.config.OpenApiConfig;
+import com.msa4lmsv2payment.global.config.openapi.CustomApiResponse;
 import com.msa4lmsv2payment.global.idempotency.IdempotencyService;
+import com.msa4lmsv2payment.global.response.CustomResponseCode;
 import com.msa4lmsv2payment.global.response.GlobalResponseDTO;
 import com.msa4lmsv2payment.global.security.CurrentUser;
 import io.swagger.v3.oas.annotations.Operation;
@@ -22,7 +23,6 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -53,11 +53,8 @@ public class PaymentController {
     private final IdempotencyService idempotencyService;
 
     @Operation(summary = "결제 금액 검증", description = "서버가 계산한 실납부액과 클라이언트가 보낸 금액이 일치하는지 비교만 하는 순수 조회(위조 요청 사전 차단용). STUDENT 본인 / ADMIN 관리 범위.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "검증 성공(valid 필드로 일치 여부 반환)"),
-            @ApiResponse(responseCode = "403", description = "본인 고지가 아님"),
-            @ApiResponse(responseCode = "404", description = "존재하지 않는 고지")
-    })
+    @ApiResponse(responseCode = "200", description = "검증 성공(valid 필드로 일치 여부 반환)")
+    @CustomApiResponse({CustomResponseCode.ACCESS_DENIED, CustomResponseCode.NOT_FOUND_DATA})
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
     @PostMapping("/api/payment/payment-amount-validation")
     public GlobalResponseDTO<PaymentAmountValidationResponseDTO> validateAmount(
@@ -68,11 +65,8 @@ public class PaymentController {
     }
 
     @Operation(summary = "결제창 연동", description = "payments 행을 REQUESTED 상태로 미리 만들고 결제창에 넘길 orderId를 발급한다. STUDENT 본인 / ADMIN 관리 범위.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "세션 생성 성공"),
-            @ApiResponse(responseCode = "403", description = "본인 고지가 아님"),
-            @ApiResponse(responseCode = "404", description = "존재하지 않는 고지")
-    })
+    @ApiResponse(responseCode = "201", description = "세션 생성 성공")
+    @CustomApiResponse({CustomResponseCode.ACCESS_DENIED, CustomResponseCode.NOT_FOUND_DATA})
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
     @ResponseStatus(HttpStatus.CREATED)
     @PostMapping("/api/payment/payments")
@@ -83,24 +77,19 @@ public class PaymentController {
         return GlobalResponseDTO.success(paymentService.createCheckoutSession(currentUser, request));
     }
 
-    // API_SPEC.md 2.1절 - 결제 API는 Idempotency-Key 필수(비멱등 PG 승인 재시도 대비, code_convention.md B17번).
+    // PG 승인은 재시도해도 두 번 승인되면 안 되는 비멱등 호출이라 Idempotency-Key가 필수다.
     @Operation(summary = "PG 결제 승인", description = """
             결제창 연동에서 생성한 REQUESTED 거래를 서버 금액과 다시 대조한 뒤 토스 confirm을 호출한다.
             토스 응답의 orderId, paymentKey, totalAmount를 로컬 거래와 모두 비교하고 일치할 때만 결과와 감사 로그를 원자적으로 저장한다.
             SUCCEEDED는 종결 상태라 이후 실패 응답으로 역전하지 않는다. STUDENT 본인 / ADMIN 관리 범위.
             """)
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "승인 완료 또는 완료된 동일 멱등 요청의 저장 응답 재생",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = GlobalResponseDTO.class),
-                            examples = @ExampleObject(name = "승인 성공", value = """
-                                    {"code":"00","message":"SUCCESS","data":{"id":10,"tuitionBillId":1,"amount":4200000,"method":"CARD","pgTransactionId":"tgen_20260813_001","status":"SUCCEEDED"}}
-                                    """))),
-            @ApiResponse(responseCode = "400", ref = OpenApiConfig.INVALID_PARAMETER_RESPONSE_REF),
-            @ApiResponse(responseCode = "403", description = "본인 고지가 아님"),
-            @ApiResponse(responseCode = "404", ref = OpenApiConfig.NOT_FOUND_RESPONSE_REF),
-            @ApiResponse(responseCode = "409", ref = OpenApiConfig.DUPLICATE_RESPONSE_REF),
-            @ApiResponse(responseCode = "503", ref = OpenApiConfig.DEPENDENCY_UNAVAILABLE_RESPONSE_REF)
-    })
+    @ApiResponse(responseCode = "200", description = "승인 완료 또는 완료된 동일 멱등 요청의 저장 응답 재생",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = GlobalResponseDTO.class),
+                    examples = @ExampleObject(name = "승인 성공", value = """
+                            {"code":"00","message":"SUCCESS","data":{"id":10,"tuitionBillId":1,"amount":4200000,"method":"CARD","pgTransactionId":"tgen_20260813_001","status":"SUCCEEDED"}}
+                            """)))
+    @CustomApiResponse({CustomResponseCode.INVALID_PARAMETER, CustomResponseCode.ACCESS_DENIED,
+            CustomResponseCode.NOT_FOUND_DATA, CustomResponseCode.DUPLICATE_DATA, CustomResponseCode.DEPENDENCY_UNAVAILABLE})
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
     @PostMapping(ENDPOINT_PAYMENTS_CONFIRM)
     public GlobalResponseDTO<PaymentResponseDTO> requestPgPayment(
@@ -123,13 +112,9 @@ public class PaymentController {
     }
 
     @Operation(summary = "결제 결과 수동 동기화", description = "PG 승인 결과가 불명확할 때 ADMIN이 토스 단건 조회 결과로 로컬 거래를 복구한다. orderId, paymentKey, totalAmount를 모두 대조하고 SUCCEEDED 종결 상태를 보호한다.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "동기화 완료(SUCCEEDED 또는 FAILED)"),
-            @ApiResponse(responseCode = "403", description = "ADMIN 아님"),
-            @ApiResponse(responseCode = "404", ref = OpenApiConfig.NOT_FOUND_RESPONSE_REF),
-            @ApiResponse(responseCode = "409", ref = OpenApiConfig.DUPLICATE_RESPONSE_REF),
-            @ApiResponse(responseCode = "503", ref = OpenApiConfig.DEPENDENCY_UNAVAILABLE_RESPONSE_REF)
-    })
+    @ApiResponse(responseCode = "200", description = "동기화 완료(SUCCEEDED 또는 FAILED)")
+    @CustomApiResponse({CustomResponseCode.ACCESS_DENIED, CustomResponseCode.NOT_FOUND_DATA,
+            CustomResponseCode.DUPLICATE_DATA, CustomResponseCode.DEPENDENCY_UNAVAILABLE})
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/api/payment/payments/{paymentId}/reconciliation")
     public GlobalResponseDTO<PaymentResponseDTO> syncPaymentResult(
@@ -141,11 +126,8 @@ public class PaymentController {
     }
 
     @Operation(summary = "납부 상태 반영", description = "SUCCEEDED 결제 합계와 실납부액을 비교해 등록금 고지 상태(UNPAID/PARTIAL/PAID)를 재계산한다. STUDENT 본인 / ADMIN 관리 범위.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "반영 성공"),
-            @ApiResponse(responseCode = "403", description = "본인 고지가 아님"),
-            @ApiResponse(responseCode = "404", description = "존재하지 않는 고지")
-    })
+    @ApiResponse(responseCode = "200", description = "반영 성공")
+    @CustomApiResponse({CustomResponseCode.ACCESS_DENIED, CustomResponseCode.NOT_FOUND_DATA})
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
     @PatchMapping("/api/payment/payment-status")
     public GlobalResponseDTO<Void> recalculateTuitionStatus(
@@ -157,11 +139,8 @@ public class PaymentController {
     }
 
     @Operation(summary = "납부 현황 반영", description = "고지금액·장학금 합계·누적 납부액·잔액·상태를 한 번에 조회한다. STUDENT 본인 / ADMIN 관리 범위.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "조회 성공"),
-            @ApiResponse(responseCode = "403", description = "본인 고지가 아님"),
-            @ApiResponse(responseCode = "404", description = "존재하지 않는 고지")
-    })
+    @ApiResponse(responseCode = "200", description = "조회 성공")
+    @CustomApiResponse({CustomResponseCode.ACCESS_DENIED, CustomResponseCode.NOT_FOUND_DATA})
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
     @GetMapping("/api/payment/payment-summary")
     public GlobalResponseDTO<PaymentSummaryResponseDTO> getPaymentSummary(
