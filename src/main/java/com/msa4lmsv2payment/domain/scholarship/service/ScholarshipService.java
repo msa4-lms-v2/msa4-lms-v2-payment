@@ -30,7 +30,7 @@ public class ScholarshipService {
     private final ScholarshipRepository scholarshipRepository;
     private final TuitionBillService tuitionBillService;
 
-    // 5.1: 동시에 여러 장학금이 적용될 때 합계 초과를 놓치지 않도록 고지 행을 잠근 뒤 합계를 다시 계산한다.
+    // 동시에 여러 장학금이 적용될 때 합계 초과를 놓치지 않도록 고지 행을 잠근 뒤 합계를 다시 계산한다.
     @Transactional
     public ScholarshipResponseDTO applyScholarshipDiscount(CurrentUser currentUser, ScholarshipDiscountRequestDTO request) {
         TuitionBill tuitionBill = tuitionBillService.getTuitionBillForUpdateOrThrow(request.tuitionBillId());
@@ -56,7 +56,7 @@ public class ScholarshipService {
     }
 
     // 학생 · 장학금 수혜 내역 화면 - 본인의 모든 학기 장학금을 학기 ID와 함께 반환한다(Figma 요구: 학기 선택 시 수혜 종류·금액 표시).
-    // getMyTuitionBills가 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다(B3번).
+    // getMyTuitionBills가 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다.
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public List<MyScholarshipResponseDTO> getMyScholarships(CurrentUser student) {
         List<TuitionBillResponseDTO> myBills = tuitionBillService.getMyTuitionBills(student);

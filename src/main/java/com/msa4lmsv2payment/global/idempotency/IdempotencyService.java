@@ -14,7 +14,7 @@ import java.util.HexFormat;
 import java.util.Optional;
 
 /**
- * M2번(멱등성 키 소유) - Idempotency-Key 헤더 검증을 각 서비스가 직접 담당한다.
+ * Idempotency-Key 헤더 검증을 각 서비스가 직접 담당한다.
  * 완료된 같은 키+같은 요청은 저장한 응답을 재생하고 하위 로직을 다시 실행하지 않는다.
  * 요청자, endpoint 또는 payload가 다르면 같은 키를 사용할 수 없다.
  */

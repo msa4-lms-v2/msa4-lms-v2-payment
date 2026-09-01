@@ -12,11 +12,11 @@ import java.math.BigDecimal;
 import java.util.Map;
 
 /**
- * 4.6: 환불 상태 저장과 감사 로그 기록을 하나의 트랜잭션으로 묶는다.
+ * 환불 상태 저장과 감사 로그 기록을 하나의 트랜잭션으로 묶는다.
  */
 @Component
 @RequiredArgsConstructor
-public class RefundRecorder {
+public class RefundRecorderService {
 
     private final RefundRepository refundRepository;
     private final AuditLogRecorder auditLogRecorder;

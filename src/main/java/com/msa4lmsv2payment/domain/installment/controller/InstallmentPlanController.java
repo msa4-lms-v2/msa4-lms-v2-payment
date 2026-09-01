@@ -4,11 +4,12 @@ import com.msa4lmsv2payment.domain.installment.request.InstallmentPlanCreateRequ
 import com.msa4lmsv2payment.domain.installment.request.InstallmentPlanReviewRequestDTO;
 import com.msa4lmsv2payment.domain.installment.response.InstallmentPlanResponseDTO;
 import com.msa4lmsv2payment.domain.installment.service.InstallmentPlanService;
+import com.msa4lmsv2payment.global.config.openapi.CustomApiResponse;
+import com.msa4lmsv2payment.global.response.CustomResponseCode;
 import com.msa4lmsv2payment.global.response.GlobalResponseDTO;
 import com.msa4lmsv2payment.global.security.CurrentUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -36,12 +37,8 @@ public class InstallmentPlanController {
             클라이언트가 회차 금액을 지정할 수 없다. 고지 1건당 신청은 하나만 만들 수 있다.
             신청 상태(REQUESTED)로 생성되며, ADMIN이 승인(ACTIVE)해야만 회차 결제를 시작할 수 있다. STUDENT 본인 / ADMIN 관리 범위.
             """)
-    @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "생성 성공"),
-            @ApiResponse(responseCode = "403", description = "본인 고지가 아님"),
-            @ApiResponse(responseCode = "404", description = "존재하지 않는 고지"),
-            @ApiResponse(responseCode = "409", description = "이미 분할납부 계획이 존재함")
-    })
+    @ApiResponse(responseCode = "201", description = "생성 성공")
+    @CustomApiResponse({CustomResponseCode.ACCESS_DENIED, CustomResponseCode.NOT_FOUND_DATA, CustomResponseCode.DUPLICATE_DATA})
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
     @ResponseStatus(HttpStatus.CREATED)
     @PostMapping("/api/payment/installment-plans")
@@ -53,11 +50,8 @@ public class InstallmentPlanController {
     }
 
     @Operation(summary = "분할납부 계획 조회", description = "등록금 고지 1건의 분할납부 신청·계획과 회차별 상태를 조회한다. STUDENT 본인 / ADMIN 관리 범위.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "조회 성공"),
-            @ApiResponse(responseCode = "403", description = "본인 고지가 아님"),
-            @ApiResponse(responseCode = "404", description = "존재하지 않는 고지 또는 분할납부 계획")
-    })
+    @ApiResponse(responseCode = "200", description = "조회 성공")
+    @CustomApiResponse({CustomResponseCode.ACCESS_DENIED, CustomResponseCode.NOT_FOUND_DATA})
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
     @GetMapping("/api/payment/installment-plans")
     public GlobalResponseDTO<InstallmentPlanResponseDTO> getInstallmentPlan(
@@ -68,13 +62,9 @@ public class InstallmentPlanController {
     }
 
     @Operation(summary = "분할납부 신청 심사", description = "ADMIN이 분할납부 신청을 승인·반려한다. 승인해야만(ACTIVE) 학생이 회차 결제를 시작할 수 있다.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "심사 완료"),
-            @ApiResponse(responseCode = "400", description = "반려 사유 누락"),
-            @ApiResponse(responseCode = "403", description = "ADMIN 아님"),
-            @ApiResponse(responseCode = "404", description = "존재하지 않는 신청"),
-            @ApiResponse(responseCode = "409", description = "이미 심사가 완료된 신청")
-    })
+    @ApiResponse(responseCode = "200", description = "심사 완료")
+    @CustomApiResponse({CustomResponseCode.INVALID_PARAMETER, CustomResponseCode.ACCESS_DENIED,
+            CustomResponseCode.NOT_FOUND_DATA, CustomResponseCode.DUPLICATE_DATA})
     @PreAuthorize("hasRole('ADMIN')")
     @PatchMapping("/api/payment/installment-plans/{planId}/review")
     public GlobalResponseDTO<InstallmentPlanResponseDTO> reviewInstallmentPlan(

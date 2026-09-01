@@ -1,7 +1,7 @@
 package com.msa4lmsv2payment.global.audit;
 
 /**
- * MY-PLAN_payment.md 7-6절 기록 대상 액션표.
+ * 감사 로그에 기록되는 업무 액션 종류.
  */
 public enum AuditAction {
     TUITION_BILL_CREATED,

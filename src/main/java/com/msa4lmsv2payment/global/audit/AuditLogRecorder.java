@@ -7,7 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * 7-6절 - "무엇이 기록됐는가"가 핵심이라 AOP 대신 서비스 계층에서 명시 호출한다.
+ * "무엇이 기록됐는가"가 핵심이라 AOP 대신 서비스 계층에서 명시적으로 호출한다.
  */
 @Slf4j
 @Component

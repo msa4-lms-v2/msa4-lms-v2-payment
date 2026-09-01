@@ -17,8 +17,8 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import java.time.LocalDateTime;
 
 /**
- * M2번(멱등성 키 소유) - Payment의 API가 중복 처리되지 않게 보장하는 Payment 자신의 책임.
- * idempotency_keys는 이력·임시 데이터 성격이라 소프트 삭제 대상이 아니다(ERD 1절 공통 규칙).
+ * Payment의 API가 중복 처리되지 않게 보장하는, Payment 자신이 소유하는 멱등성 키.
+ * idempotency_keys는 이력·임시 데이터 성격이라 소프트 삭제 대상이 아니다.
  */
 @Entity
 @Table(name = "idempotency_keys")

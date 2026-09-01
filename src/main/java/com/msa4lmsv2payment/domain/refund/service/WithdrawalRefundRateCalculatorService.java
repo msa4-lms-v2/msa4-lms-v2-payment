@@ -1,4 +1,4 @@
-package com.msa4lmsv2payment.domain.refund;
+package com.msa4lmsv2payment.domain.refund.service;
 
 import com.msa4lmsv2payment.global.config.WithdrawalRefundRateProperties;
 import lombok.RequiredArgsConstructor;
@@ -9,13 +9,13 @@ import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 
 /**
- * 자퇴 환불률 계산 - MY-PLAN_payment.md 7-2절(고등교육법 시행령 반환 기준)·7-3절(개강일~종강일 달력일수 근사).
+ * 자퇴 환불률 계산 - 고등교육법 시행령 반환 기준을 개강일~종강일 경과 비율로 근사해 적용한다.
  * "수업일수 대비 경과 비율" 기준이라 정확한 수업일수(공휴일 제외) 대신 달력일수로 근사한다 - 15주 학기 기준
- * 1/3·1/2·2/3 구간 경계가 이 근사로 크게 흔들리지 않는다(7-3절).
+ * 1/3·1/2·2/3 구간 경계가 이 근사로 크게 흔들리지 않는다.
  */
 @Component
 @RequiredArgsConstructor
-public class WithdrawalRefundRateCalculator {
+public class WithdrawalRefundRateCalculatorService {
 
     private final WithdrawalRefundRateProperties properties;
 

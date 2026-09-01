@@ -6,7 +6,6 @@ import com.msa4lmsv2payment.global.error.BusinessException;
 import com.msa4lmsv2payment.global.error.NotStudentAccountException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Profile;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Component;
@@ -17,7 +16,6 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 @Slf4j
-@Profile("!stub")
 @Component
 public class AcademicHttpClient implements AcademicClient {
 

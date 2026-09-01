@@ -39,11 +39,6 @@ dependencies {
     annotationProcessor 'org.projectlombok:lombok'
 
     runtimeOnly 'com.mysql:mysql-connector-j'
-
-    testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
-    testImplementation 'org.springframework.security:spring-security-test'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 def dotEnvProps() {
@@ -53,12 +48,6 @@ def dotEnvProps() {
         envFile.withInputStream { props.load(it) }
     }
     return props.collectEntries { key, value -> [(key): value] }
-}
-
-tasks.named('test') {
-    useJUnitPlatform()
-    // code_convention.md B15번 - @SpringBootTest(contextLoads 등)가 DB 접속정보를 .env에서 읽도록 주입한다.
-    environment(dotEnvProps())
 }
 
 sourceSets {

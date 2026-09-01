@@ -30,10 +30,10 @@ public class VirtualAccountService {
     private final VirtualAccountRepository virtualAccountRepository;
     private final TuitionBillService tuitionBillService;
     private final TossPaymentsClient tossPaymentsClient;
-    private final VirtualAccountRecorder virtualAccountRecorder;
+    private final VirtualAccountRecorderService virtualAccountRecorder;
 
-    // SCRUM-55: 가상계좌 발급 (7-4절 - 입금 Webhook 없이 발급 자체만 완결)
-    // Toss 호출 동안 DB 커넥션을 붙잡지 않도록 트랜잭션 밖에서 실행한다(B3번).
+    // 가상계좌 발급. 입금 Webhook 없이 발급 자체만 완결한다.
+    // Toss 호출 동안 DB 커넥션을 붙잡지 않도록 트랜잭션 밖에서 실행한다.
     // 저장과 감사 로그는 virtualAccountRecorder가 하나의 트랜잭션으로 묶는다(4.6).
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public VirtualAccountResponseDTO issueVirtualAccount(CurrentUser currentUser, VirtualAccountIssueRequestDTO request) {
@@ -55,7 +55,7 @@ public class VirtualAccountService {
     }
 
     /**
-     * 다른 도메인(refund 등)이 가상계좌를 조회해야 할 때 이 공개 메서드를 거친다(B1번 패키지 경계).
+     * 다른 도메인(refund 등)이 가상계좌를 조회해야 할 때 이 공개 메서드를 거친다.
      */
     public VirtualAccount getByTuitionBillIdOrThrow(Long tuitionBillId) {
         return virtualAccountRepository.findByTuitionBillId(tuitionBillId)
