@@ -1,6 +1,6 @@
 package com.msa4lmsv2payment.global.security;
 
-import com.msa4lmsv2payment.global.response.CustomResponseCode;
+import com.msa4lmsv2payment.global.response.constant.CustomResponseCode;
 import com.msa4lmsv2payment.global.response.GlobalResponseDTO;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;

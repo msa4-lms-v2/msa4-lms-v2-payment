@@ -36,6 +36,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> {
                     auth.requestMatchers("/actuator/health", "/actuator/health/**").permitAll();
                     auth.requestMatchers(SWAGGER_PATHS).permitAll();
+                    auth.requestMatchers("/api/payment/webhooks/**").permitAll();
                     auth.anyRequest().authenticated();
                 })
                 .exceptionHandling(handling -> handling

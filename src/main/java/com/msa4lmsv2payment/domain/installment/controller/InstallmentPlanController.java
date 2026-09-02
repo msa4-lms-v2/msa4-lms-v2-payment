@@ -5,7 +5,7 @@ import com.msa4lmsv2payment.domain.installment.request.InstallmentPlanReviewRequ
 import com.msa4lmsv2payment.domain.installment.response.InstallmentPlanResponseDTO;
 import com.msa4lmsv2payment.domain.installment.service.InstallmentPlanService;
 import com.msa4lmsv2payment.global.config.openapi.CustomApiResponse;
-import com.msa4lmsv2payment.global.response.CustomResponseCode;
+import com.msa4lmsv2payment.global.response.constant.CustomResponseCode;
 import com.msa4lmsv2payment.global.response.GlobalResponseDTO;
 import com.msa4lmsv2payment.global.security.CurrentUser;
 import io.swagger.v3.oas.annotations.Operation;

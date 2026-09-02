@@ -1,6 +1,6 @@
 package com.msa4lmsv2payment.global.config.openapi;
 
-import com.msa4lmsv2payment.global.response.CustomResponseCode;
+import com.msa4lmsv2payment.global.response.constant.CustomResponseCode;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

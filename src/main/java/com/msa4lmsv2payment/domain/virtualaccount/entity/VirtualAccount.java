@@ -15,6 +15,7 @@ import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
@@ -31,6 +32,10 @@ public class VirtualAccount {
 
     private Long tuitionBillId;
 
+    private String orderId;
+
+    private String secret;
+
     private String accountNumber;
 
     private String bankCode;
@@ -43,11 +48,27 @@ public class VirtualAccount {
     @CreatedDate
     private LocalDateTime createdAt;
 
-    public VirtualAccount(Long tuitionBillId, String accountNumber, String bankCode, LocalDateTime expiresAt, VirtualAccountStatus status) {
+    public VirtualAccount(Long tuitionBillId, String orderId, String secret, String accountNumber, String bankCode,
+                           LocalDateTime expiresAt, VirtualAccountStatus status) {
         this.tuitionBillId = tuitionBillId;
+        this.orderId = orderId;
+        this.secret = secret;
         this.accountNumber = accountNumber;
         this.bankCode = bankCode;
         this.expiresAt = expiresAt;
         this.status = status;
+    }
+
+    public boolean matchesSecret(String candidate) {
+        return this.secret.equals(candidate);
+    }
+
+    // 누적 입금액을 순납부액과 비교해 상태를 갱신한다. 초과분은 호출한 쪽이 환불로 처리한다.
+    public void applyDeposit(BigDecimal totalDeposited, BigDecimal netDue) {
+        if (totalDeposited.compareTo(netDue) >= 0) {
+            this.status = VirtualAccountStatus.DEPOSITED;
+        } else if (totalDeposited.compareTo(BigDecimal.ZERO) > 0) {
+            this.status = VirtualAccountStatus.PARTIALLY_DEPOSITED;
+        }
     }
 }
