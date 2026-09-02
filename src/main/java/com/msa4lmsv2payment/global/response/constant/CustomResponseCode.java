@@ -1,4 +1,4 @@
-package com.msa4lmsv2payment.global.response;
+package com.msa4lmsv2payment.global.response.constant;
 
 import lombok.Getter;
 import org.springframework.http.HttpStatus;

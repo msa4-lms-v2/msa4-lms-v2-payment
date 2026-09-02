@@ -6,7 +6,7 @@ import com.msa4lmsv2payment.domain.virtualaccount.response.VirtualAccountRespons
 import com.msa4lmsv2payment.domain.virtualaccount.service.VirtualAccountDepositService;
 import com.msa4lmsv2payment.domain.virtualaccount.service.VirtualAccountService;
 import com.msa4lmsv2payment.global.config.openapi.CustomApiResponse;
-import com.msa4lmsv2payment.global.response.CustomResponseCode;
+import com.msa4lmsv2payment.global.response.constant.CustomResponseCode;
 import com.msa4lmsv2payment.global.response.GlobalResponseDTO;
 import com.msa4lmsv2payment.global.security.CurrentUser;
 import io.swagger.v3.oas.annotations.Operation;

@@ -1,6 +1,6 @@
 package com.msa4lmsv2payment.global.error;
 
-import com.msa4lmsv2payment.global.response.CustomResponseCode;
+import com.msa4lmsv2payment.global.response.constant.CustomResponseCode;
 
 /**
  * 확정 시점에 성공 결제 합계 + 신규 결제 금액이 현재 순납부액을 초과할 때.

@@ -7,7 +7,7 @@ import com.msa4lmsv2payment.domain.scholarshipapplication.response.ScholarshipAp
 import com.msa4lmsv2payment.domain.scholarshipapplication.response.ScholarshipApplicationResponseDTO;
 import com.msa4lmsv2payment.domain.scholarshipapplication.service.ScholarshipApplicationService;
 import com.msa4lmsv2payment.global.config.openapi.CustomApiResponse;
-import com.msa4lmsv2payment.global.response.CustomResponseCode;
+import com.msa4lmsv2payment.global.response.constant.CustomResponseCode;
 import com.msa4lmsv2payment.global.response.GlobalResponseDTO;
 import com.msa4lmsv2payment.global.security.CurrentUser;
 import io.swagger.v3.oas.annotations.Operation;
