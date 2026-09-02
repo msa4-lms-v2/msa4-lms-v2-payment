@@ -21,7 +21,7 @@ pipeline {
 
         stage('Update Manifest') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'jenkins-msa4-lms-v2-manifests', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
+                withCredentials([usernamePassword(credentialsId: 'msa4-team3', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
                     sh """
                         git clone https://\${GIT_USER}:\${GIT_TOKEN}@${MANIFEST_REPO.replace('https://', '')} k8s-manifests
                         cd k8s-manifests/${MANIFEST_PATH}
