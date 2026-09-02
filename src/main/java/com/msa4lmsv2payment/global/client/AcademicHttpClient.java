@@ -4,6 +4,7 @@ import com.msa4lmsv2payment.global.error.AcademicResourceNotFoundException;
 import com.msa4lmsv2payment.global.error.AcademicServiceUnavailableException;
 import com.msa4lmsv2payment.global.error.BusinessException;
 import com.msa4lmsv2payment.global.error.NotStudentAccountException;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
@@ -11,6 +12,8 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -20,6 +23,7 @@ import java.util.function.Supplier;
 public class AcademicHttpClient implements AcademicClient {
 
     private static final String SERVICE_NAME = "msa4-lms-v2-payment";
+    private static final String REQUEST_ID_HEADER = "X-Request-Id";
     private static final int MAX_ATTEMPTS = 2;
 
     private final RestClient restClient;
@@ -63,9 +67,14 @@ public class AcademicHttpClient implements AcademicClient {
     private <T> T get(Function<RestClient.RequestHeadersUriSpec<?>, RestClient.RequestHeadersSpec<?>> uriCustomizer,
                        ParameterizedTypeReference<InternalApiResponse<T>> typeRef,
                        Supplier<RuntimeException> notFoundExceptionSupplier) {
+        String requestId = currentRequestId();
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
-                InternalApiResponse<T> response = uriCustomizer.apply(restClient.get())
+                RestClient.RequestHeadersSpec<?> spec = uriCustomizer.apply(restClient.get());
+                if (requestId != null) {
+                    spec = spec.header(REQUEST_ID_HEADER, requestId);
+                }
+                InternalApiResponse<T> response = spec
                         .retrieve()
                         .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
                             if (res.getStatusCode().value() == 404) {
@@ -76,14 +85,14 @@ public class AcademicHttpClient implements AcademicClient {
                         })
                         .body(typeRef);
 
-                if (response == null || !response.isSuccess()) {
+                if (response == null || !response.isSuccess() || response.data() == null) {
                     throw new AcademicServiceUnavailableException("학적 서비스 응답이 올바르지 않습니다.");
                 }
                 return response.data();
             } catch (BusinessException e) {
                 throw e;
             } catch (RestClientException e) {
-                log.warn("Academic 서비스 호출 실패({}/{}): {}", attempt, MAX_ATTEMPTS, e.getMessage());
+                log.warn("Academic 서비스 호출 실패(requestId={}, {}/{}): {}", requestId, attempt, MAX_ATTEMPTS, e.getMessage());
                 if (attempt == MAX_ATTEMPTS) {
                     throw new AcademicServiceUnavailableException("학적 서비스에 연결할 수 없습니다.");
                 }
@@ -91,6 +100,14 @@ public class AcademicHttpClient implements AcademicClient {
             }
         }
         throw new AcademicServiceUnavailableException("학적 서비스에 연결할 수 없습니다.");
+    }
+
+    private String currentRequestId() {
+        if (!(RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attrs)) {
+            return null;
+        }
+        HttpServletRequest request = attrs.getRequest();
+        return request.getHeader(REQUEST_ID_HEADER);
     }
 
     private void sleep(long millis) {
