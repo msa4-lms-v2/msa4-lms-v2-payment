@@ -15,7 +15,7 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       maximum-pool-size: 10
-      connection-timeout: 3000
+      connection-timeout: 10000
       validation-timeout: 1000
 
   jpa:
