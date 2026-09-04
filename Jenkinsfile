@@ -28,7 +28,7 @@ pipeline {
                         sed -i "s|image: ${REGISTRY}/${IMAGE_NAME}:.*|image: ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}|" deployment.yaml
                         git config user.email msa4-team3@ci
                         git config user.name msa4-team3-ci
-                        git commit -am "Deploy ${IMAGE_NAME}:${IMAGE_TAG}"
+                        git commit -am "Deploy ${IMAGE_NAME}:${IMAGE_TAG}" || echo "변경 사항 없음 - 배포 스킵"
                         git push
                     """
                 }
