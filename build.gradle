@@ -39,6 +39,7 @@ dependencies {
     annotationProcessor 'org.projectlombok:lombok'
 
     runtimeOnly 'com.mysql:mysql-connector-j'
+    implementation 'org.springframework.kafka:spring-kafka'
 }
 
 def dotEnvProps() {
