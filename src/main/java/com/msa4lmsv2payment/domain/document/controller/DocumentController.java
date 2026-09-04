@@ -4,7 +4,7 @@ import com.msa4lmsv2payment.domain.document.request.PaymentReceiptRequestDTO;
 import com.msa4lmsv2payment.domain.document.response.DocumentResponseDTO;
 import com.msa4lmsv2payment.domain.document.service.DocumentService;
 import com.msa4lmsv2payment.global.config.openapi.CustomApiResponse;
-import com.msa4lmsv2payment.global.response.CustomResponseCode;
+import com.msa4lmsv2payment.global.response.constant.CustomResponseCode;
 import com.msa4lmsv2payment.global.response.GlobalResponseDTO;
 import com.msa4lmsv2payment.global.security.CurrentUser;
 import io.swagger.v3.oas.annotations.Operation;

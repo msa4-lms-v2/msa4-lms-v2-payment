@@ -133,6 +133,37 @@ public class TossPaymentsClient {
     }
 
     /**
+     * 주문번호로 결제 조회(GET /v1/payments/orders/{orderId}).
+     * 가상계좌 입금 Webhook은 금액을 담지 않으므로(문서에 secret/status/transactionKey/orderId/createdAt 5개뿐),
+     * 실제 입금액은 이 API로 다시 조회해 확인한다 - Webhook 본문을 그대로 신뢰하지 않는다.
+     */
+    public TossPaymentResponse getPaymentByOrderId(String orderId) {
+        if (!secretKeyConfigured) {
+            throw new TossServiceUnavailableException("TOSS_SECRET_KEY가 설정되지 않았습니다.");
+        }
+
+        try {
+            TossPaymentResponse response = restClient.get()
+                    .uri("/v1/payments/orders/{orderId}", orderId)
+                    .retrieve()
+                    .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
+                        throw new TossServiceUnavailableException("존재하지 않는 주문입니다: " + orderId);
+                    })
+                    .body(TossPaymentResponse.class);
+
+            if (response == null) {
+                throw new TossServiceUnavailableException("토스페이먼츠 결제 조회 응답이 올바르지 않습니다.");
+            }
+            return response;
+        } catch (TossServiceUnavailableException e) {
+            throw e;
+        } catch (RestClientException e) {
+            log.warn("토스페이먼츠 주문 조회 실패: {}", e.getMessage());
+            throw new TossServiceUnavailableException("토스페이먼츠 주문 조회에 실패했습니다.");
+        }
+    }
+
+    /**
      * 결제 단건 조회(GET /v1/payments/{paymentKey}) - confirm 호출이 타임아웃됐을 때
      * 실제로는 처리됐는지 재확인하는 복구용.
      */

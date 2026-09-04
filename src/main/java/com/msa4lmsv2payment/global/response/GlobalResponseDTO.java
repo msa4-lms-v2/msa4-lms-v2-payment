@@ -1,5 +1,6 @@
 package com.msa4lmsv2payment.global.response;
 
+import com.msa4lmsv2payment.global.response.constant.CustomResponseCode;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 @Schema(description = "공통 응답 포맷")

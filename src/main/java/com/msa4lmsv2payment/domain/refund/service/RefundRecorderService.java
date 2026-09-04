@@ -32,6 +32,16 @@ public class RefundRecorderService {
     }
 
     @Transactional
+    public Refund saveExcessDepositRefund(Long actorId, Refund refund) {
+        Refund saved = refundRepository.save(refund);
+        auditLogRecorder.record(actorId, AuditAction.REFUND_REQUESTED, "REFUND", saved.getId(),
+                Map.of("tuitionBillId", saved.getTuitionBillId(), "virtualAccountId", saved.getVirtualAccountId(),
+                        "amount", saved.getAmount()),
+                null);
+        return saved;
+    }
+
+    @Transactional
     public Refund saveRetried(Long actorId, Refund refund) {
         Refund saved = refundRepository.save(refund);
         auditLogRecorder.record(actorId, AuditAction.REFUND_RETRIED, "REFUND", saved.getId(),

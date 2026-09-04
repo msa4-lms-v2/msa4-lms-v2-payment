@@ -45,6 +45,8 @@ public class VirtualAccountService {
 
         VirtualAccount virtualAccount = new VirtualAccount(
                 tuitionBill.getId(),
+                orderId,
+                tossResponse.secret(),
                 tossResponse.virtualAccount().accountNumber(),
                 tossResponse.virtualAccount().bankCode(),
                 LocalDateTime.now().plusHours(DEFAULT_VALID_HOURS),

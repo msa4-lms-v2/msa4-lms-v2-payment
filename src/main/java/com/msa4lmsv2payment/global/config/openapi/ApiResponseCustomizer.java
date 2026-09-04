@@ -1,6 +1,6 @@
 package com.msa4lmsv2payment.global.config.openapi;
 
-import com.msa4lmsv2payment.global.response.CustomResponseCode;
+import com.msa4lmsv2payment.global.response.constant.CustomResponseCode;
 import com.msa4lmsv2payment.global.response.GlobalResponseDTO;
 import io.swagger.v3.oas.models.Operation;
 import io.swagger.v3.oas.models.examples.Example;
@@ -43,13 +43,26 @@ public class ApiResponseCustomizer implements OperationCustomizer {
         }
 
         for (Map.Entry<Integer, List<CustomResponseCode>> entry : byHttpStatus.entrySet()) {
-            MediaType mediaType = new MediaType();
+            String status = String.valueOf(entry.getKey());
+            ApiResponse existing = responses.get(status);
+
+            ApiResponse target = existing != null ? existing : new ApiResponse().description("에러 응답");
+            Content content = target.getContent();
+            if (content == null) {
+                content = new Content();
+                target.setContent(content);
+            }
+            MediaType mediaType = content.get("application/json");
+            if (mediaType == null) {
+                mediaType = new MediaType();
+                content.addMediaType("application/json", mediaType);
+            }
             for (CustomResponseCode code : entry.getValue()) {
                 mediaType.addExamples(code.name(),
                         new Example().value(new GlobalResponseDTO<Void>(code.getCode(), code.name(), null)));
             }
-            Content content = new Content().addMediaType("application/json", mediaType);
-            responses.addApiResponse(String.valueOf(entry.getKey()), new ApiResponse().description("에러 응답").content(content));
+
+            responses.addApiResponse(status, target);
         }
 
         return operation;
