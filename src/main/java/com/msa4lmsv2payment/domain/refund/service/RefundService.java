@@ -21,7 +21,6 @@ import com.msa4lmsv2payment.domain.payment.repository.PaymentRepository;
 import com.msa4lmsv2payment.global.client.AcademicClient;
 import com.msa4lmsv2payment.global.client.AcademicSemesterResponse;
 import com.msa4lmsv2payment.global.client.AcademicWithdrawalResponse;
-import com.msa4lmsv2payment.global.error.WithdrawalNotApprovedException;
 import com.msa4lmsv2payment.global.security.CurrentUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -132,9 +131,6 @@ public class RefundService {
         AcademicWithdrawalResponse withdrawal = academicClient.findWithdrawal(withdrawalId);
         if (!withdrawal.studentId().equals(tuitionBill.getStudentId())) {
             throw new TuitionBillAccessDeniedException("본인의 자퇴 신청이 아닙니다.");
-        }
-        if (!"APPROVED".equals(withdrawal.status()) || withdrawal.effectiveDate() == null) {
-            throw new WithdrawalNotApprovedException("승인되어 효력일이 확정된 자퇴 신청만 환불을 계산할 수 있습니다.");
         }
         AcademicSemesterResponse semester = academicClient.findSemester(tuitionBill.getSemesterId());
         return withdrawalRefundRateCalculator.calculate(withdrawal.effectiveDate(), semester.startDate(), semester.endDate());
