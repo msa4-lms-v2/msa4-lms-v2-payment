@@ -1,7 +1,5 @@
 package com.msa4lmsv2payment.global.kafka;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.msa4lmsv2payment.domain.academicsnapshot.repository.SemesterSnapshotRepository;
 import com.msa4lmsv2payment.domain.academicsnapshot.repository.StudentSnapshotRepository;
 import com.msa4lmsv2payment.domain.academicsnapshot.repository.WithdrawalSnapshotRepository;
@@ -11,10 +9,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
+@Transactional
 public class AcademicEventConsumer {
 
     private static final String GROUP_ID = "msa4-team3-payment-academic-sync";
@@ -25,7 +27,7 @@ public class AcademicEventConsumer {
     private final ObjectMapper objectMapper;
 
     @KafkaListener(topics = "msa4-team3.academic.student-changed", groupId = GROUP_ID)
-    public void onStudentSnapshotChanged(String message) throws Exception {
+    public void onStudentSnapshotChanged(String message) {
         JsonNode payload = objectMapper.readTree(message);
         studentSnapshotRepository.upsertIfNewer(
                 payload.get("studentId").asLong(),
@@ -39,7 +41,7 @@ public class AcademicEventConsumer {
     }
 
     @KafkaListener(topics = "msa4-team3.academic.semester-created", groupId = GROUP_ID)
-    public void onSemesterCreated(String message) throws Exception {
+    public void onSemesterCreated(String message) {
         JsonNode payload = objectMapper.readTree(message);
         semesterSnapshotRepository.upsertIfNewer(
                 payload.get("semesterId").asLong(),
@@ -53,7 +55,7 @@ public class AcademicEventConsumer {
     }
 
     @KafkaListener(topics = "msa4-team3.academic.withdrawal-approved", groupId = GROUP_ID)
-    public void onWithdrawalApproved(String message) throws Exception {
+    public void onWithdrawalApproved(String message) {
         JsonNode payload = objectMapper.readTree(message);
         withdrawalSnapshotRepository.upsertIfNewer(
                 payload.get("withdrawalId").asLong(),
