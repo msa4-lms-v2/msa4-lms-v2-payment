@@ -12,6 +12,7 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 @Component
 @RequiredArgsConstructor
@@ -23,6 +24,7 @@ public class AcademicSnapshotClient implements AcademicClient {
     private final AcademicResyncClient academicResyncClient;
 
     @Override
+    @Transactional
     public AcademicStudentResponse findStudentByUserId(Long userId) {
         Optional<StudentSnapshot> snapshot = studentSnapshotRepository.findByUserId(userId);
         if (snapshot.isPresent()) {
@@ -35,6 +37,7 @@ public class AcademicSnapshotClient implements AcademicClient {
     }
 
     @Override
+    @Transactional
     public AcademicStudentExistsResponse findStudent(Long studentId) {
         Optional<StudentSnapshot> snapshot = studentSnapshotRepository.findById(studentId);
         if (snapshot.isPresent()) {
@@ -47,6 +50,7 @@ public class AcademicSnapshotClient implements AcademicClient {
     }
 
     @Override
+    @Transactional
     public AcademicSemesterResponse findSemester(Long semesterId) {
         Optional<SemesterSnapshot> snapshot = semesterSnapshotRepository.findById(semesterId);
         if (snapshot.isPresent()) {
@@ -61,6 +65,7 @@ public class AcademicSnapshotClient implements AcademicClient {
     }
 
     @Override
+    @Transactional
     public AcademicWithdrawalResponse findWithdrawal(Long withdrawalId) {
         Optional<WithdrawalSnapshot> snapshot = withdrawalSnapshotRepository.findById(withdrawalId);
         if (snapshot.isPresent()) {
