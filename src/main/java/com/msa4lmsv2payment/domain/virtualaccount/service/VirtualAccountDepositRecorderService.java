@@ -1,5 +1,7 @@
 package com.msa4lmsv2payment.domain.virtualaccount.service;
 
+import com.msa4lmsv2payment.domain.installment.entity.InstallmentPlanItem;
+import com.msa4lmsv2payment.domain.installment.service.InstallmentPlanService;
 import com.msa4lmsv2payment.domain.payment.entity.Payment;
 import com.msa4lmsv2payment.domain.payment.entity.PaymentMethod;
 import com.msa4lmsv2payment.domain.payment.entity.PaymentStatus;
@@ -45,6 +47,7 @@ public class VirtualAccountDepositRecorderService {
     private final VirtualAccountDepositRepository virtualAccountDepositRepository;
     private final TuitionBillService tuitionBillService;
     private final ScholarshipService scholarshipService;
+    private final InstallmentPlanService installmentPlanService;
     private final PaymentResultRecorderService paymentResultRecorder;
     private final RefundRecorderService refundRecorder;
     private final AuditLogRecorder auditLogRecorder;
@@ -68,9 +71,17 @@ public class VirtualAccountDepositRecorderService {
                 Map.of("depositId", deposit.getId(), "amount", amount), null);
 
         TuitionBill tuitionBill = tuitionBillService.getTuitionBillOrThrow(virtualAccount.getTuitionBillId());
-        BigDecimal netDue = tuitionBill.getBillingAmount()
-                .subtract(scholarshipService.sumScholarshipAmount(tuitionBill.getId()))
-                .max(BigDecimal.ZERO);
+        Long installmentPlanItemId = virtualAccount.getInstallmentPlanItemId();
+        BigDecimal netDue;
+        if (installmentPlanItemId != null) {
+            // 분할납부 회차 스코프 계좌 - 순납부액은 고지 전체 잔액이 아니라 이 회차 금액이다.
+            InstallmentPlanItem item = installmentPlanService.getItemOrThrow(tuitionBill.getId(), installmentPlanItemId);
+            netDue = item.getAmount();
+        } else {
+            netDue = tuitionBill.getBillingAmount()
+                    .subtract(scholarshipService.sumScholarshipAmount(tuitionBill.getId()))
+                    .max(BigDecimal.ZERO);
+        }
         BigDecimal totalDeposited = virtualAccountDepositRepository.sumAmount(virtualAccountId);
 
         virtualAccount.applyDeposit(totalDeposited, netDue);
@@ -80,10 +91,17 @@ public class VirtualAccountDepositRecorderService {
             return; // PARTIALLY_DEPOSITED - 나머지 입금을 기다린다.
         }
 
-        Payment payment = new Payment(tuitionBill.getId(), tuitionBill.getStudentId(), netDue, PaymentMethod.VIRTUAL_ACCOUNT, PaymentStatus.REQUESTED);
+        Payment payment = new Payment(tuitionBill.getId(), tuitionBill.getStudentId(), netDue, PaymentMethod.VIRTUAL_ACCOUNT,
+                PaymentStatus.REQUESTED, installmentPlanItemId);
         payment.succeed(transactionKey);
-        paymentResultRecorder.saveWithAudit(SYSTEM_ACTOR_ID, payment, null);
-        tuitionBillService.changeStatus(tuitionBill.getId(), TuitionBillStatus.PAID);
+        Payment savedPayment = paymentResultRecorder.saveWithAudit(SYSTEM_ACTOR_ID, payment, null);
+
+        if (installmentPlanItemId != null) {
+            installmentPlanService.assignPaymentToItem(installmentPlanItemId, savedPayment.getId());
+            installmentPlanService.markItemPaid(installmentPlanItemId, savedPayment.getId());
+        } else {
+            tuitionBillService.changeStatus(tuitionBill.getId(), TuitionBillStatus.PAID);
+        }
 
         BigDecimal excess = totalDeposited.subtract(netDue);
         if (excess.compareTo(BigDecimal.ZERO) > 0) {
