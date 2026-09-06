@@ -48,6 +48,8 @@ public class VirtualAccount {
     @CreatedDate
     private LocalDateTime createdAt;
 
+    private Long installmentPlanItemId;
+
     public VirtualAccount(Long tuitionBillId, String orderId, String secret, String accountNumber, String bankCode,
                            LocalDateTime expiresAt, VirtualAccountStatus status) {
         this.tuitionBillId = tuitionBillId;
@@ -57,6 +59,13 @@ public class VirtualAccount {
         this.bankCode = bankCode;
         this.expiresAt = expiresAt;
         this.status = status;
+    }
+
+    // 분할납부 회차별 가상계좌 발급 - installmentPlanItemId가 채워진 계좌는 회차 금액만 순납부액으로 취급한다.
+    public VirtualAccount(Long tuitionBillId, String orderId, String secret, String accountNumber, String bankCode,
+                           LocalDateTime expiresAt, VirtualAccountStatus status, Long installmentPlanItemId) {
+        this(tuitionBillId, orderId, secret, accountNumber, bankCode, expiresAt, status);
+        this.installmentPlanItemId = installmentPlanItemId;
     }
 
     public boolean matchesSecret(String candidate) {

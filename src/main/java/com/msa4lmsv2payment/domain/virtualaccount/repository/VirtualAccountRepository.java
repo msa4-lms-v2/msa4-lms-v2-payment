@@ -14,4 +14,6 @@ public interface VirtualAccountRepository extends JpaRepository<VirtualAccount, 
     Optional<VirtualAccount> findByOrderId(String orderId);
 
     List<VirtualAccount> findByStatusInAndExpiresAtBefore(List<VirtualAccountStatus> statuses, LocalDateTime now);
+
+    Optional<VirtualAccount> findByInstallmentPlanItemId(Long installmentPlanItemId);
 }
