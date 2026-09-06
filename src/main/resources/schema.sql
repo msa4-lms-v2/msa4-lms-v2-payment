@@ -1,7 +1,6 @@
 -- msa4-lms-v2-payment 스키마
--- 관리 방식: code_convention.md B20번(DB 마이그레이션) - 소규모/초기 단계 schema.sql 손 관리
+-- 소규모/초기 단계라 별도 마이그레이션 도구 없이 이 schema.sql을 직접 손으로 관리한다.
 -- 반영 이력은 analytics/report/msa4-lms-v2-payment/msa4-lms-v2-payment_report.md 에 기록한다.
--- 근거: docs-v2/MSA-LMS_ERD.md 4절(Payment·문서 서비스 ERD), 5-3절(상태값 정의)
 
 -- 2026-08-08: week-1 착수분 (tuition_bills, scholarships) 최초 생성
 
@@ -32,19 +31,57 @@ CREATE TABLE IF NOT EXISTS scholarships (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 2026-08-08: week-2 착수분 (refunds, idempotency_keys, audit_logs, virtual_accounts) 추가
--- MY-PLAN_payment.md 7-4절 결정으로 virtual_accounts(가상계좌 발급)를 week-4에서 week-2로 당겼다.
+-- virtual_accounts(가상계좌 발급)는 원래 이후 단계 예정이었으나 이 단계로 앞당겼다.
 
 CREATE TABLE IF NOT EXISTS virtual_accounts (
     id              BIGINT AUTO_INCREMENT PRIMARY KEY,
     tuition_bill_id BIGINT NOT NULL,
+    order_id        VARCHAR(64) NOT NULL COMMENT '발급 시 토스에 보낸 orderId. 입금 Webhook이 이 값으로 계좌를 찾는다',
+    secret          VARCHAR(64) NOT NULL COMMENT '토스 발급 응답의 virtualAccount.secret. 입금 Webhook 본문의 secret과 대조해 위조 요청을 막는다',
     account_number  VARCHAR(30) NOT NULL,
     bank_code       VARCHAR(10) NOT NULL,
     expires_at      DATETIME NOT NULL,
-    status          VARCHAR(20) NOT NULL COMMENT 'ISSUED, DEPOSITED, EXPIRED',
+    status          VARCHAR(20) NOT NULL COMMENT 'ISSUED, PARTIALLY_DEPOSITED, DEPOSITED, EXPIRED',
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uk_virtual_accounts_account_number (account_number),
+    UNIQUE KEY uk_virtual_accounts_order_id (order_id),
     INDEX idx_virtual_accounts_tuition_bill_id (tuition_bill_id),
     CONSTRAINT fk_virtual_accounts_tuition_bill FOREIGN KEY (tuition_bill_id) REFERENCES tuition_bills (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 4주차(입금 Webhook) 도입 전에 만들어진 실제 DB에는 order_id/secret 컬럼이 없어 재실행해도 안전하게 추가한다.
+SET @virtual_accounts_order_id_exists = (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'virtual_accounts' AND COLUMN_NAME = 'order_id'
+);
+SET @virtual_accounts_order_id_ddl = IF(@virtual_accounts_order_id_exists = 0,
+    'ALTER TABLE virtual_accounts ADD COLUMN order_id VARCHAR(64) NOT NULL DEFAULT '''', ADD CONSTRAINT uk_virtual_accounts_order_id UNIQUE (order_id)',
+    'SELECT 1');
+PREPARE virtual_accounts_order_id_stmt FROM @virtual_accounts_order_id_ddl;
+EXECUTE virtual_accounts_order_id_stmt;
+DEALLOCATE PREPARE virtual_accounts_order_id_stmt;
+
+SET @virtual_accounts_secret_exists = (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'virtual_accounts' AND COLUMN_NAME = 'secret'
+);
+SET @virtual_accounts_secret_ddl = IF(@virtual_accounts_secret_exists = 0,
+    'ALTER TABLE virtual_accounts ADD COLUMN secret VARCHAR(64) NOT NULL DEFAULT ''''',
+    'SELECT 1');
+PREPARE virtual_accounts_secret_stmt FROM @virtual_accounts_secret_ddl;
+EXECUTE virtual_accounts_secret_stmt;
+DEALLOCATE PREPARE virtual_accounts_secret_stmt;
+
+CREATE TABLE IF NOT EXISTS virtual_account_deposits (
+    id                  BIGINT AUTO_INCREMENT PRIMARY KEY,
+    virtual_account_id  BIGINT NOT NULL,
+    amount              DECIMAL(12, 0) NOT NULL,
+    toss_transaction_key VARCHAR(100) NOT NULL COMMENT '중복 Webhook 수신 방지용 - 토스 응답에 명시적 거래키가 없으면 계좌+금액+통보시각 조합으로 대체',
+    received_at         DATETIME NOT NULL COMMENT '토스가 통보한 입금 시각',
+    created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_virtual_account_deposits_transaction_key (toss_transaction_key),
+    INDEX idx_virtual_account_deposits_virtual_account_id (virtual_account_id),
+    CONSTRAINT fk_virtual_account_deposits_virtual_account FOREIGN KEY (virtual_account_id) REFERENCES virtual_accounts (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS refunds (
@@ -55,7 +92,7 @@ CREATE TABLE IF NOT EXISTS refunds (
     withdrawal_id       BIGINT COMMENT 'Academic withdrawal_requests.id, FK 아님. WITHDRAWAL 환불에만 사용',
     refund_type         VARCHAR(20) NOT NULL COMMENT 'WITHDRAWAL, PG_CANCEL, EXCESS_DEPOSIT',
     amount              DECIMAL(12, 0) NOT NULL,
-    refund_rate         DECIMAL(5, 4) NOT NULL COMMENT '7-2절 반환율표 기준 (예: 0.8333 = 5/6)',
+    refund_rate         DECIMAL(5, 4) NOT NULL COMMENT '자퇴 환불률 (예: 0.8333 = 5/6)',
     status              VARCHAR(20) NOT NULL COMMENT 'REQUESTED, SUCCEEDED, FAILED, RETRYING',
     requested_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     completed_at        DATETIME,
@@ -82,7 +119,7 @@ CREATE TABLE IF NOT EXISTS idempotency_keys (
 CREATE TABLE IF NOT EXISTS audit_logs (
     id            BIGINT AUTO_INCREMENT PRIMARY KEY,
     actor_id      BIGINT NOT NULL COMMENT 'Academic.users.id 참조, FK 아님',
-    action        VARCHAR(50) NOT NULL COMMENT '7-6절 액션표 참고 (TUITION_BILL_CREATED, REFUND_REQUESTED 등)',
+    action        VARCHAR(50) NOT NULL COMMENT '업무 액션 코드 (TUITION_BILL_CREATED, REFUND_REQUESTED 등)',
     target_type   VARCHAR(50) NOT NULL,
     target_id     BIGINT NOT NULL,
     before_value  JSON,
@@ -94,8 +131,8 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     INDEX idx_audit_logs_target (target_type, target_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 2026-08-08: week-3 착수분 (payments, documents) 추가 — MY-PLAN_payment.md 10절
--- documents.document_type에 PAYMENT_CERTIFICATE(납부 확인서)를 포함한다(7-8절, docs-v2/MSA-LMS_ERD.md 5-3절 갱신).
+-- 2026-08-08: week-3 착수분 (payments, documents) 추가
+-- documents.document_type에 PAYMENT_CERTIFICATE(납부 확인서)를 포함한다.
 
 CREATE TABLE IF NOT EXISTS payments (
     id                 BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -112,13 +149,22 @@ CREATE TABLE IF NOT EXISTS payments (
     CONSTRAINT fk_payments_tuition_bill FOREIGN KEY (tuition_bill_id) REFERENCES tuition_bills (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- refunds.payment_id는 week-2 시점엔 payments가 없어 FK 없이 컬럼만 있었다. 이제 생겼으니 FK를 추가한다(B20번 - 기존 CREATE TABLE 문은 손대지 않고 ALTER로만 반영).
-ALTER TABLE refunds
-    ADD CONSTRAINT fk_refunds_payment FOREIGN KEY (payment_id) REFERENCES payments (id);
+-- refunds.payment_id는 week-2 시점엔 payments가 없어 FK 없이 컬럼만 있었다. 이제 생겼으니 FK를 추가한다.
+-- 기존 CREATE TABLE 문은 손대지 않고 이렇게 ALTER로만 반영한다. 재실행해도 중복 추가되지 않도록 존재 여부를 먼저 확인한다.
+SET @fk_refunds_payment_exists = (
+    SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'refunds' AND CONSTRAINT_NAME = 'fk_refunds_payment'
+);
+SET @fk_refunds_payment_ddl = IF(@fk_refunds_payment_exists = 0,
+    'ALTER TABLE refunds ADD CONSTRAINT fk_refunds_payment FOREIGN KEY (payment_id) REFERENCES payments (id)',
+    'SELECT 1');
+PREPARE fk_refunds_payment_stmt FROM @fk_refunds_payment_ddl;
+EXECUTE fk_refunds_payment_stmt;
+DEALLOCATE PREPARE fk_refunds_payment_stmt;
 
 CREATE TABLE IF NOT EXISTS documents (
     id                  BIGINT AUTO_INCREMENT PRIMARY KEY,
-    student_id          BIGINT COMMENT 'Academic.users.id 참조, FK 아님',
+    student_id          BIGINT COMMENT 'Academic.students.id 참조, FK 아님',
     professor_id        BIGINT COMMENT 'Academic.users.id 참조, FK 아님',
     document_type       VARCHAR(30) NOT NULL COMMENT 'ENROLLMENT, GRADUATION, GRADE, EMPLOYMENT, PAYMENT_CERTIFICATE',
     issued_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -134,16 +180,43 @@ CREATE TABLE IF NOT EXISTS documents (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- SCRUM-177(실패한 환불 재시도, 비기능 #26) - 재시도 횟수를 남겨 "최종 실패" 상태를 판단할 근거로 쓴다.
-ALTER TABLE refunds ADD COLUMN retry_count INT NOT NULL DEFAULT 0;
+-- 실패한 환불 재시도 - 재시도 횟수를 남겨 "최종 실패" 상태를 판단할 근거로 쓴다.
+SET @refunds_retry_count_exists = (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'refunds' AND COLUMN_NAME = 'retry_count'
+);
+SET @refunds_retry_count_ddl = IF(@refunds_retry_count_exists = 0,
+    'ALTER TABLE refunds ADD COLUMN retry_count INT NOT NULL DEFAULT 0',
+    'SELECT 1');
+PREPARE refunds_retry_count_stmt FROM @refunds_retry_count_ddl;
+EXECUTE refunds_retry_count_stmt;
+DEALLOCATE PREPARE refunds_retry_count_stmt;
 
--- 2026-08-10: ERD 리뷰 반영 - applyWithdrawalRefundRate()의 "있으면 갱신, 없으면 생성" 패턴이
+-- applyWithdrawalRefundRate()의 "있으면 갱신, 없으면 생성" 패턴이
 -- DB 제약 없이 앱 로직(findByTuitionBillIdAndRefundType)만으로 중복을 막고 있어 동시요청 경쟁조건에 노출돼 있었다.
 -- 같은 (tuition_bill_id, refund_type) 조합의 두 번째 INSERT를 DB가 직접 거부하게 한다.
-ALTER TABLE refunds ADD CONSTRAINT uk_refunds_tuition_bill_type UNIQUE (tuition_bill_id, refund_type);
+SET @uk_refunds_tuition_bill_type_exists = (
+    SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'refunds' AND CONSTRAINT_NAME = 'uk_refunds_tuition_bill_type'
+);
+SET @uk_refunds_tuition_bill_type_ddl = IF(@uk_refunds_tuition_bill_type_exists = 0,
+    'ALTER TABLE refunds ADD CONSTRAINT uk_refunds_tuition_bill_type UNIQUE (tuition_bill_id, refund_type)',
+    'SELECT 1');
+PREPARE uk_refunds_tuition_bill_type_stmt FROM @uk_refunds_tuition_bill_type_ddl;
+EXECUTE uk_refunds_tuition_bill_type_stmt;
+DEALLOCATE PREPARE uk_refunds_tuition_bill_type_stmt;
 
 -- refund_rate는 0~1 사이 비율인데 계산 로직 버그로 음수·1 초과값이 저장될 여지를 DB 레벨에서 막는다.
-ALTER TABLE refunds ADD CONSTRAINT chk_refunds_rate CHECK (refund_rate BETWEEN 0 AND 1);
+SET @chk_refunds_rate_exists = (
+    SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'refunds' AND CONSTRAINT_NAME = 'chk_refunds_rate'
+);
+SET @chk_refunds_rate_ddl = IF(@chk_refunds_rate_exists = 0,
+    'ALTER TABLE refunds ADD CONSTRAINT chk_refunds_rate CHECK (refund_rate BETWEEN 0 AND 1)',
+    'SELECT 1');
+PREPARE chk_refunds_rate_stmt FROM @chk_refunds_rate_ddl;
+EXECUTE chk_refunds_rate_stmt;
+DEALLOCATE PREPARE chk_refunds_rate_stmt;
 
 -- 2026-08-15: 분할납부(installment) - 등록금 고지 1건을 회차별로 나눠 결제할 수 있게 계획을 저장한다.
 -- payments.installment_plan_item_id로 어느 회차의 결제인지 연결하고, 회차 금액은 항상 서버가 계산해 위조를 막는다(기존 payment-amount-validation과 동일 원칙).
@@ -174,12 +247,31 @@ CREATE TABLE IF NOT EXISTS installment_plan_items (
     CONSTRAINT fk_installment_plan_items_payment FOREIGN KEY (payment_id) REFERENCES payments (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- ERD 리뷰(2026-08-10)는 결제 1건이 서로 다른 두 회차의 완납 처리에 쓰이지 않도록 UNIQUE를 권고했지만,
--- 이 컬럼에 그대로 걸면 결제 실패·방치 후 같은 회차를 다시 결제하려는 정상 재시도까지 DB 제약 위반으로 막힌다
+-- 결제 1건이 서로 다른 두 회차의 완납 처리에 쓰이지 않도록 이 컬럼에 UNIQUE를 걸 수도 있지만,
+-- 그러면 결제 실패·방치 후 같은 회차를 다시 결제하려는 정상 재시도까지 DB 제약 위반으로 막힌다
 -- (일반 전액결제도 같은 이유로 tuition_bill_id에 UNIQUE를 걸지 않는다). 대신 InstallmentPlanService.getItemOrThrow가
 -- 이미 PAID인 회차의 신규 체크아웃 세션 생성을 막고, 기존 TuitionOverpaymentGuard가 합계 기준 이중 청구를 막는다.
-ALTER TABLE payments ADD COLUMN installment_plan_item_id BIGINT COMMENT '분할납부 회차 결제일 때만 채워짐, installment_plan_items.id 참조';
-ALTER TABLE payments ADD CONSTRAINT fk_payments_installment_plan_item FOREIGN KEY (installment_plan_item_id) REFERENCES installment_plan_items (id);
+SET @payments_installment_plan_item_id_exists = (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'payments' AND COLUMN_NAME = 'installment_plan_item_id'
+);
+SET @payments_installment_plan_item_id_ddl = IF(@payments_installment_plan_item_id_exists = 0,
+    'ALTER TABLE payments ADD COLUMN installment_plan_item_id BIGINT COMMENT ''분할납부 회차 결제일 때만 채워짐, installment_plan_items.id 참조''',
+    'SELECT 1');
+PREPARE payments_installment_plan_item_id_stmt FROM @payments_installment_plan_item_id_ddl;
+EXECUTE payments_installment_plan_item_id_stmt;
+DEALLOCATE PREPARE payments_installment_plan_item_id_stmt;
+
+SET @fk_payments_installment_plan_item_exists = (
+    SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'payments' AND CONSTRAINT_NAME = 'fk_payments_installment_plan_item'
+);
+SET @fk_payments_installment_plan_item_ddl = IF(@fk_payments_installment_plan_item_exists = 0,
+    'ALTER TABLE payments ADD CONSTRAINT fk_payments_installment_plan_item FOREIGN KEY (installment_plan_item_id) REFERENCES installment_plan_items (id)',
+    'SELECT 1');
+PREPARE fk_payments_installment_plan_item_stmt FROM @fk_payments_installment_plan_item_ddl;
+EXECUTE fk_payments_installment_plan_item_stmt;
+DEALLOCATE PREPARE fk_payments_installment_plan_item_stmt;
 
 -- 2026-08-15: 장학금 신청(student-initiated) - 기존 scholarships/scholarship-discounts는 관리자가 배분을 확정하는 API만 있어,
 -- 학생이 직접 신청을 접수하는 절차와 그 승인 이력을 별도로 남긴다. 승인되면 이 신청을 근거로 scholarships 행이 생성된다.
