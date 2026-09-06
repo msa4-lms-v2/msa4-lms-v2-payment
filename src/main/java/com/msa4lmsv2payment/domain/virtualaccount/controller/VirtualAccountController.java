@@ -47,7 +47,7 @@ public class VirtualAccountController {
     @ApiResponse(responseCode = "200", description = "처리 완료(신규 반영 또는 이미 처리된 건이라 무시)")
     @CustomApiResponse({CustomResponseCode.ACCESS_DENIED, CustomResponseCode.NOT_FOUND_DATA})
     @PostMapping("/api/payment/webhooks/toss/virtual-account-deposits")
-    public GlobalResponseDTO<Void> receiveVirtualAccountDeposit(@RequestBody TossVirtualAccountDepositWebhookRequest request) {
+    public GlobalResponseDTO<Void> receiveVirtualAccountDeposit(@RequestBody @Valid TossVirtualAccountDepositWebhookRequest request) {
         virtualAccountDepositService.processDeposit(request);
         return GlobalResponseDTO.success();
     }

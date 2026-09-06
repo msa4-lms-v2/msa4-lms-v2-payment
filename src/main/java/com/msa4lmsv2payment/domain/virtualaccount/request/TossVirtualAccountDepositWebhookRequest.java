@@ -1,5 +1,7 @@
 package com.msa4lmsv2payment.domain.virtualaccount.request;
 
+import jakarta.validation.constraints.NotBlank;
+
 /**
  * 토스페이먼츠 가상계좌 입금 Webhook(DEPOSIT_CALLBACK) 본문.
  * 공식 문서(docs.tosspayments.com/reference/using-api/webhook-events) 기준 필드는
@@ -9,10 +11,10 @@ package com.msa4lmsv2payment.domain.virtualaccount.request;
  * transactionKey는 같은 거래의 중복 통보를 걸러내는 고유 식별자다.
  */
 public record TossVirtualAccountDepositWebhookRequest(
-        String secret,
+        @NotBlank(message = "secret은 필수입니다.") String secret,
         String status,
-        String transactionKey,
-        String orderId,
+        @NotBlank(message = "transactionKey는 필수입니다.") String transactionKey,
+        @NotBlank(message = "orderId는 필수입니다.") String orderId,
         String createdAt
 ) {
 }
