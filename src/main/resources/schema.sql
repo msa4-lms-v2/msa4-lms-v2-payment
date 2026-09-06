@@ -241,7 +241,7 @@ CREATE TABLE IF NOT EXISTS installment_plan_items (
     amount               DECIMAL(12, 0) NOT NULL,
     due_date             DATE NOT NULL,
     payment_id           BIGINT COMMENT '이 회차를 결제한 payments.id, 결제 전에는 NULL',
-    status               VARCHAR(20) NOT NULL COMMENT 'SCHEDULED, PAID',
+    status               VARCHAR(20) NOT NULL COMMENT 'SCHEDULED, PAID, OVERDUE',
     UNIQUE KEY uk_installment_plan_items_plan_round (installment_plan_id, round_no),
     CONSTRAINT fk_installment_plan_items_plan FOREIGN KEY (installment_plan_id) REFERENCES installment_plans (id),
     CONSTRAINT fk_installment_plan_items_payment FOREIGN KEY (payment_id) REFERENCES payments (id)

@@ -4,10 +4,13 @@ import com.msa4lmsv2payment.domain.installment.entity.InstallmentItemStatus;
 import com.msa4lmsv2payment.domain.installment.entity.InstallmentPlanItem;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.time.LocalDate;
 import java.util.List;
 
 public interface InstallmentPlanItemRepository extends JpaRepository<InstallmentPlanItem, Long> {
     List<InstallmentPlanItem> findByInstallmentPlanIdOrderByRoundNo(Long installmentPlanId);
 
     long countByInstallmentPlanIdAndStatus(Long installmentPlanId, InstallmentItemStatus status);
+
+    List<InstallmentPlanItem> findByStatusAndDueDateBefore(InstallmentItemStatus status, LocalDate date);
 }
