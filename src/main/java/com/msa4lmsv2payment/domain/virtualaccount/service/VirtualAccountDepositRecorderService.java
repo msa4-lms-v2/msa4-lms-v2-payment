@@ -93,4 +93,29 @@ public class VirtualAccountDepositRecorderService {
             refundRecorder.saveExcessDepositRefund(SYSTEM_ACTOR_ID, refund);
         }
     }
+
+    /**
+     * 만료된 가상계좌로 입금됐을 때 처리한다 - 입금 자체는 그대로 기록해 실제로 돈이 들어왔다는 사실을 남기되,
+     * 정상 완납 흐름(고지 상태 변경·결제 생성)은 타지 않고 전액을 즉시 환불 대상으로 돌린다.
+     */
+    @Transactional
+    public void recordExpiredAccountDeposit(Long virtualAccountId, BigDecimal amount, String transactionKey) {
+        VirtualAccount virtualAccount = virtualAccountRepository.findById(virtualAccountId)
+                .orElseThrow(() -> new VirtualAccountNotFoundException("가상계좌를 찾을 수 없습니다: " + virtualAccountId));
+
+        VirtualAccountDeposit deposit;
+        try {
+            deposit = virtualAccountDepositRepository.save(
+                    new VirtualAccountDeposit(virtualAccountId, amount, transactionKey, LocalDateTime.now()));
+        } catch (DataIntegrityViolationException e) {
+            log.info("동시 요청으로 이미 처리된 가상계좌 입금 Webhook, 무시함 [virtualAccountId={}, transactionKey={}]", virtualAccountId, transactionKey);
+            return;
+        }
+        auditLogRecorder.record(SYSTEM_ACTOR_ID, AuditAction.VIRTUAL_ACCOUNT_DEPOSIT_RECEIVED, "VIRTUAL_ACCOUNT", virtualAccountId,
+                Map.of("depositId", deposit.getId(), "amount", amount, "accountExpired", true), null);
+
+        Refund refund = new Refund(virtualAccount.getTuitionBillId(), RefundType.EXCESS_DEPOSIT, amount, BigDecimal.ONE, RefundStatus.REQUESTED);
+        refund.linkVirtualAccount(virtualAccountId);
+        refundRecorder.saveExcessDepositRefund(SYSTEM_ACTOR_ID, refund);
+    }
 }
