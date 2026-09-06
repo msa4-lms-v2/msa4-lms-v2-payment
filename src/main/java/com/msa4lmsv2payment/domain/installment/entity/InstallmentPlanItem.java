@@ -62,4 +62,9 @@ public class InstallmentPlanItem {
     public void markPaid() {
         this.status = InstallmentItemStatus.PAID;
     }
+
+    // 기한이 지나도록 미납인 회차만 대상이다(스케줄러가 SCHEDULED만 조회해서 부르므로 여기서는 무조건 전환).
+    public void markOverdue() {
+        this.status = InstallmentItemStatus.OVERDUE;
+    }
 }
