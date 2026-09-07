@@ -1,5 +1,6 @@
 package com.msa4lmsv2payment.domain.refund.controller;
 
+import com.msa4lmsv2payment.domain.refund.entity.RefundStatus;
 import com.msa4lmsv2payment.domain.refund.request.PgCancelRefundRequestDTO;
 import com.msa4lmsv2payment.domain.refund.request.RefundExecuteRequestDTO;
 import com.msa4lmsv2payment.domain.refund.request.RefundRetryRequestDTO;
@@ -23,6 +24,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -64,17 +66,25 @@ public class RefundController {
         return GlobalResponseDTO.success(refundService.estimateWithdrawalRefund(currentUser, tuitionBillId, withdrawalId));
     }
 
-    @Operation(summary = "자퇴 처리일 기준 환불률 적용", description = "자퇴 이력과 학기 일정을 Academic에서 조회해 환불률과 금액을 계산하고 REQUESTED 환불로 저장한다. 동일 고지의 미완료 요청은 갱신하지만 SUCCEEDED 환불의 금액과 비율은 변경하지 않는다.")
+    @Operation(summary = "자퇴 처리일 기준 환불률 적용", description = """
+            자퇴 이력과 학기 일정을 Academic에서 조회해 환불률과 금액을 계산하고 REQUESTED 환불로 저장한다.
+            동일 고지의 미완료 요청은 갱신하지만 SUCCEEDED 환불의 금액과 비율은 변경하지 않는다.
+            Academic 스냅샷에 자퇴 건이 아직 반영되지 않았으면 계산을 보류하고 PENDING_ACADEMIC_VERIFICATION으로
+            저장한 뒤 202를 반환한다 - 자동 재검증 스케줄러가 주기적으로 다시 시도한다.
+            """)
     @ApiResponse(responseCode = "200", description = "적용 성공")
+    @ApiResponse(responseCode = "202", description = "Academic 스냅샷 미반영으로 PENDING_ACADEMIC_VERIFICATION 보류 저장, 자동 재검증 예정")
     @CustomApiResponse({CustomResponseCode.ACCESS_DENIED, CustomResponseCode.INVALID_PARAMETER,
-            CustomResponseCode.NOT_FOUND_DATA, CustomResponseCode.DEPENDENCY_UNAVAILABLE})
+            CustomResponseCode.NOT_FOUND_DATA, CustomResponseCode.MANUAL_REVIEW_REQUIRED, CustomResponseCode.DEPENDENCY_UNAVAILABLE})
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
     @PatchMapping("/api/payment/refunds/withdrawal-rate")
-    public GlobalResponseDTO<RefundResponseDTO> applyWithdrawalRefundRate(
+    public ResponseEntity<GlobalResponseDTO<RefundResponseDTO>> applyWithdrawalRefundRate(
             @AuthenticationPrincipal CurrentUser currentUser,
             @RequestBody @Valid WithdrawalRefundRateRequestDTO request
     ) {
-        return GlobalResponseDTO.success(refundService.applyWithdrawalRefundRate(currentUser, request));
+        RefundResponseDTO response = refundService.applyWithdrawalRefundRate(currentUser, request);
+        HttpStatus status = response.status() == RefundStatus.PENDING_ACADEMIC_VERIFICATION ? HttpStatus.ACCEPTED : HttpStatus.OK;
+        return ResponseEntity.status(status).body(GlobalResponseDTO.success(response));
     }
 
     // 완료된 동일 멱등 요청은 저장된 응답을 재생하며 환불 연결 로직을 다시 실행하지 않는다.
