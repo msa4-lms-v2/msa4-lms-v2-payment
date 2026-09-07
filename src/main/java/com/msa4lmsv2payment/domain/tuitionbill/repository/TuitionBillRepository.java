@@ -20,4 +20,6 @@ public interface TuitionBillRepository extends JpaRepository<TuitionBill, Long> 
     Optional<TuitionBill> findByIdForUpdate(@Param("id") Long id);
 
     List<TuitionBill> findByStatusInAndDueDateBefore(List<TuitionBillStatus> statuses, LocalDate date);
+
+    Optional<TuitionBill> findByStudentIdAndSemesterId(Long studentId, Long semesterId);
 }

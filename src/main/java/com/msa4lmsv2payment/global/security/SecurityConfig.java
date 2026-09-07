@@ -37,6 +37,9 @@ public class SecurityConfig {
                     auth.requestMatchers("/actuator/health", "/actuator/health/**").permitAll();
                     auth.requestMatchers(SWAGGER_PATHS).permitAll();
                     auth.requestMatchers("/api/payment/webhooks/**").permitAll();
+                    // Academic이 호출하는 서비스 간 시스템 요청 - X-User-Id/X-User-Role을 싣지 않으므로 인증 대상에서 제외한다.
+                    // 실제 보호는 SCG Internal listener + NetworkPolicy가 담당한다(docs-v2/MSA-LMS_INTEGRATION.md "서비스 시스템 요청").
+                    auth.requestMatchers("/api/payment/academic-provision/**").permitAll();
                     auth.anyRequest().authenticated();
                 })
                 .exceptionHandling(handling -> handling
