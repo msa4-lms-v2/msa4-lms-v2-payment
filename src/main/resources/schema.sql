@@ -85,6 +85,19 @@ PREPARE virtual_accounts_installment_plan_item_id_stmt FROM @virtual_accounts_in
 EXECUTE virtual_accounts_installment_plan_item_id_stmt;
 DEALLOCATE PREPARE virtual_accounts_installment_plan_item_id_stmt;
 
+-- 4주차: 토스 가상계좌 발급 응답 최상위(Payment 객체)의 paymentKey를 저장한다 - 입금 완료 후 이 계좌를
+-- 실제로 취소(환불)하려면 입금 시점의 거래키(toss_transaction_key)가 아니라 발급 시점의 paymentKey가 필요하다.
+SET @virtual_accounts_payment_key_exists = (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'virtual_accounts' AND COLUMN_NAME = 'payment_key'
+);
+SET @virtual_accounts_payment_key_ddl = IF(@virtual_accounts_payment_key_exists = 0,
+    'ALTER TABLE virtual_accounts ADD COLUMN payment_key VARCHAR(200) COMMENT ''토스 가상계좌 발급 응답의 paymentKey - 환불(취소) 호출에 사용''',
+    'SELECT 1');
+PREPARE virtual_accounts_payment_key_stmt FROM @virtual_accounts_payment_key_ddl;
+EXECUTE virtual_accounts_payment_key_stmt;
+DEALLOCATE PREPARE virtual_accounts_payment_key_stmt;
+
 CREATE TABLE IF NOT EXISTS virtual_account_deposits (
     id                  BIGINT AUTO_INCREMENT PRIMARY KEY,
     virtual_account_id  BIGINT NOT NULL,
@@ -218,6 +231,66 @@ SET @uk_refunds_tuition_bill_type_ddl = IF(@uk_refunds_tuition_bill_type_exists 
 PREPARE uk_refunds_tuition_bill_type_stmt FROM @uk_refunds_tuition_bill_type_ddl;
 EXECUTE uk_refunds_tuition_bill_type_stmt;
 DEALLOCATE PREPARE uk_refunds_tuition_bill_type_stmt;
+
+-- 4주차: 위 (tuition_bill_id, refund_type) 제약은 WITHDRAWAL(고지당 1건)에는 맞지만
+-- EXCESS_DEPOSIT(분할납부 회차마다 별도 가상계좌가 초과입금될 수 있음, SCRUM-131)과
+-- PG_CANCEL(고지 하나에 결제가 여러 건일 수 있어 결제별로 취소 요청이 생김, SCRUM-180)에는 너무 좁다.
+-- 유형별로 실제 유일성 범위가 다르므로(WITHDRAWAL=고지당, EXCESS_DEPOSIT=가상계좌당, PG_CANCEL=결제당)
+-- 생성 컬럼으로 유형별 키를 만들어 하나의 UNIQUE 인덱스로 세 조건을 동시에 표현한다.
+SET @uk_refunds_tuition_bill_type_drop_exists = (
+    SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'refunds' AND CONSTRAINT_NAME = 'uk_refunds_tuition_bill_type'
+);
+SET @uk_refunds_tuition_bill_type_drop_ddl = IF(@uk_refunds_tuition_bill_type_drop_exists > 0,
+    'ALTER TABLE refunds DROP INDEX uk_refunds_tuition_bill_type',
+    'SELECT 1');
+PREPARE uk_refunds_tuition_bill_type_drop_stmt FROM @uk_refunds_tuition_bill_type_drop_ddl;
+EXECUTE uk_refunds_tuition_bill_type_drop_stmt;
+DEALLOCATE PREPARE uk_refunds_tuition_bill_type_drop_stmt;
+
+SET @refunds_dedup_key_exists = (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'refunds' AND COLUMN_NAME = 'refund_dedup_key'
+);
+SET @refunds_dedup_key_ddl = IF(@refunds_dedup_key_exists = 0,
+    'ALTER TABLE refunds ADD COLUMN refund_dedup_key VARCHAR(50) GENERATED ALWAYS AS (
+        CASE refund_type
+            WHEN ''WITHDRAWAL'' THEN CONCAT(''TB:'', tuition_bill_id)
+            WHEN ''EXCESS_DEPOSIT'' THEN CONCAT(''VA:'', virtual_account_id)
+            WHEN ''PG_CANCEL'' THEN CONCAT(''PAY:'', payment_id)
+        END
+    ) STORED',
+    'SELECT 1');
+PREPARE refunds_dedup_key_stmt FROM @refunds_dedup_key_ddl;
+EXECUTE refunds_dedup_key_stmt;
+DEALLOCATE PREPARE refunds_dedup_key_stmt;
+
+SET @uk_refunds_dedup_exists = (
+    SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'refunds' AND CONSTRAINT_NAME = 'uk_refunds_dedup'
+);
+SET @uk_refunds_dedup_ddl = IF(@uk_refunds_dedup_exists = 0,
+    'ALTER TABLE refunds ADD CONSTRAINT uk_refunds_dedup UNIQUE (refund_dedup_key)',
+    'SELECT 1');
+PREPARE uk_refunds_dedup_stmt FROM @uk_refunds_dedup_ddl;
+EXECUTE uk_refunds_dedup_stmt;
+DEALLOCATE PREPARE uk_refunds_dedup_stmt;
+
+-- 가상계좌 환불(WITHDRAWAL/EXCESS_DEPOSIT)의 토스 cancel 호출은 refundReceiveAccount(수취 계좌)가 필수다.
+-- PG_CANCEL(카드)은 필요 없어 세 컬럼 모두 nullable로 두고 실행(execute) 시점에 채운다.
+SET @refunds_refund_bank_code_exists = (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'refunds' AND COLUMN_NAME = 'refund_bank_code'
+);
+SET @refunds_refund_bank_code_ddl = IF(@refunds_refund_bank_code_exists = 0,
+    'ALTER TABLE refunds
+        ADD COLUMN refund_bank_code VARCHAR(10) COMMENT ''가상계좌 환불 수취은행 코드, PG_CANCEL은 NULL'',
+        ADD COLUMN refund_account_number VARCHAR(20) COMMENT ''가상계좌 환불 수취계좌번호(하이픈 없이), PG_CANCEL은 NULL'',
+        ADD COLUMN refund_holder_name VARCHAR(60) COMMENT ''가상계좌 환불 수취계좌 예금주명, PG_CANCEL은 NULL''',
+    'SELECT 1');
+PREPARE refunds_refund_bank_code_stmt FROM @refunds_refund_bank_code_ddl;
+EXECUTE refunds_refund_bank_code_stmt;
+DEALLOCATE PREPARE refunds_refund_bank_code_stmt;
 
 -- refund_rate는 0~1 사이 비율인데 계산 로직 버그로 음수·1 초과값이 저장될 여지를 DB 레벨에서 막는다.
 SET @chk_refunds_rate_exists = (

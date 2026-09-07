@@ -7,7 +7,7 @@ package com.msa4lmsv2payment.global.client;
  * secret은 virtualAccount 안이 아니라 응답 최상위(Payment 객체)에 있다 - 실제 테스트 발급 호출로 확인함.
  * 입금 Webhook 본문의 secret과 대조해 위조 요청을 막는 용도로 추가했다.
  */
-public record TossVirtualAccountIssueResponse(String secret, VirtualAccountInfo virtualAccount) {
+public record TossVirtualAccountIssueResponse(String paymentKey, String secret, VirtualAccountInfo virtualAccount) {
 
     public record VirtualAccountInfo(
             String accountNumber,

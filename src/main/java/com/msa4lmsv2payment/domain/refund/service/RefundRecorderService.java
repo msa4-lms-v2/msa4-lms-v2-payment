@@ -48,4 +48,29 @@ public class RefundRecorderService {
                 Map.of("retryCount", saved.getRetryCount()), null);
         return saved;
     }
+
+    @Transactional
+    public Refund savePgCancelRequested(Long actorId, Refund refund) {
+        Refund saved = refundRepository.save(refund);
+        auditLogRecorder.record(actorId, AuditAction.REFUND_REQUESTED, "REFUND", saved.getId(),
+                Map.of("tuitionBillId", saved.getTuitionBillId(), "paymentId", saved.getPaymentId(), "amount", saved.getAmount()),
+                null);
+        return saved;
+    }
+
+    @Transactional
+    public Refund saveSucceeded(Long actorId, Refund refund) {
+        Refund saved = refundRepository.save(refund);
+        auditLogRecorder.record(actorId, AuditAction.REFUND_SUCCEEDED, "REFUND", saved.getId(),
+                Map.of("amount", saved.getAmount()), null);
+        return saved;
+    }
+
+    @Transactional
+    public Refund saveFailed(Long actorId, Refund refund, String reason) {
+        Refund saved = refundRepository.save(refund);
+        auditLogRecorder.record(actorId, AuditAction.REFUND_FAILED, "REFUND", saved.getId(),
+                Map.of("amount", saved.getAmount()), reason);
+        return saved;
+    }
 }

@@ -67,6 +67,7 @@ public class VirtualAccountService {
                 VirtualAccountStatus.ISSUED,
                 installmentPlanItemId
         );
+        virtualAccount.assignPaymentKey(tossResponse.paymentKey());
 
         return VirtualAccountResponseDTO.from(virtualAccountRecorder.saveWithAudit(currentUser.id(), virtualAccount));
     }
@@ -77,5 +78,14 @@ public class VirtualAccountService {
     public VirtualAccount getByTuitionBillIdOrThrow(Long tuitionBillId) {
         return virtualAccountRepository.findByTuitionBillId(tuitionBillId)
                 .orElseThrow(() -> new VirtualAccountNotFoundException("해당 등록금 고지에 발급된 가상계좌가 없습니다."));
+    }
+
+    /**
+     * 환불 실행(RefundService)이 refund.virtualAccountId로 특정 가상계좌를 직접 찾아야 할 때 이 공개 메서드를 거친다.
+     * 분할납부 회차별 가상계좌(4주차)가 생기면서 고지 1건에 계좌가 여러 개일 수 있어 findByTuitionBillId만으로는 부족하다.
+     */
+    public VirtualAccount getByIdOrThrow(Long virtualAccountId) {
+        return virtualAccountRepository.findById(virtualAccountId)
+                .orElseThrow(() -> new VirtualAccountNotFoundException("가상계좌를 찾을 수 없습니다: " + virtualAccountId));
     }
 }

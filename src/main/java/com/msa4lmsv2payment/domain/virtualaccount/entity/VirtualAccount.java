@@ -50,6 +50,8 @@ public class VirtualAccount {
 
     private Long installmentPlanItemId;
 
+    private String paymentKey;
+
     public VirtualAccount(Long tuitionBillId, String orderId, String secret, String accountNumber, String bankCode,
                            LocalDateTime expiresAt, VirtualAccountStatus status) {
         this.tuitionBillId = tuitionBillId;
@@ -70,6 +72,11 @@ public class VirtualAccount {
 
     public boolean matchesSecret(String candidate) {
         return this.secret.equals(candidate);
+    }
+
+    // 토스 가상계좌 발급 응답의 paymentKey - 발급 직후 한 번만 채워지며, 이후 이 계좌를 취소(환불)할 때 사용한다.
+    public void assignPaymentKey(String paymentKey) {
+        this.paymentKey = paymentKey;
     }
 
     // 누적 입금액을 순납부액과 비교해 상태를 갱신한다. 초과분은 호출한 쪽이 환불로 처리한다.
