@@ -71,4 +71,13 @@ public class VirtualAccount {
             this.status = VirtualAccountStatus.PARTIALLY_DEPOSITED;
         }
     }
+
+    // 이미 완납된 계좌는 만료 스케줄러가 지나가도 내려가지 않는다(applyDeposit과 같은 단방향 원칙).
+    public boolean expire() {
+        if (this.status == VirtualAccountStatus.DEPOSITED) {
+            return false;
+        }
+        this.status = VirtualAccountStatus.EXPIRED;
+        return true;
+    }
 }
