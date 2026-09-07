@@ -11,6 +11,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
 import java.util.Map;
 
 @Slf4j
@@ -160,6 +161,48 @@ public class TossPaymentsClient {
         } catch (RestClientException e) {
             log.warn("토스페이먼츠 주문 조회 실패: {}", e.getMessage());
             throw new TossServiceUnavailableException("토스페이먼츠 주문 조회에 실패했습니다.");
+        }
+    }
+
+    /**
+     * 결제 취소(POST /v1/payments/{paymentKey}/cancel). cancelAmount를 생략하면 전액 취소, 지정하면 부분취소다.
+     * 가상계좌(WITHDRAWAL/EXCESS_DEPOSIT) 환불은 refundReceiveAccount(수취 계좌)가 필수이고, 카드(PG_CANCEL)는 null로 둔다.
+     * 같은 취소가 중복 처리되지 않도록 Idempotency-Key를 함께 보낸다.
+     */
+    public TossPaymentResponse cancelPayment(String paymentKey, String cancelReason, BigDecimal cancelAmount,
+                                              TossRefundReceiveAccount refundReceiveAccount, String idempotencyKey) {
+        if (!secretKeyConfigured) {
+            throw new TossServiceUnavailableException("TOSS_SECRET_KEY가 설정되지 않았습니다.");
+        }
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("cancelReason", cancelReason);
+        if (cancelAmount != null) {
+            body.put("cancelAmount", cancelAmount);
+        }
+        if (refundReceiveAccount != null) {
+            body.put("refundReceiveAccount", Map.of(
+                    "bank", refundReceiveAccount.bankCode(),
+                    "accountNumber", refundReceiveAccount.accountNumber(),
+                    "holderName", refundReceiveAccount.holderName()));
+        }
+
+        try {
+            return restClient.post()
+                    .uri("/v1/payments/{paymentKey}/cancel", paymentKey)
+                    .header("Idempotency-Key", idempotencyKey)
+                    .body(body)
+                    .retrieve()
+                    .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
+                        throw new TossPaymentRejectedException(
+                                "토스페이먼츠 결제 취소 요청이 거부됐습니다(상태 " + res.getStatusCode().value() + ").");
+                    })
+                    .body(TossPaymentResponse.class);
+        } catch (TossPaymentRejectedException e) {
+            throw e;
+        } catch (RestClientException e) {
+            log.warn("토스페이먼츠 결제 취소 호출 실패: {}", e.getMessage());
+            throw new TossServiceUnavailableException("토스페이먼츠 결제 취소에 실패했습니다.");
         }
     }
 

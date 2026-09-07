@@ -12,10 +12,22 @@ import java.util.Optional;
 public interface RefundRepository extends JpaRepository<Refund, Long> {
     Optional<Refund> findByTuitionBillIdAndRefundType(Long tuitionBillId, RefundType refundType);
 
+    Optional<Refund> findByPaymentIdAndRefundType(Long paymentId, RefundType refundType);
+
     List<Refund> findByTuitionBillIdAndStatus(Long tuitionBillId, RefundStatus status);
+
+    List<Refund> findByTuitionBillIdOrderByRequestedAtDesc(Long tuitionBillId);
+
+    List<Refund> findByPaymentIdAndStatus(Long paymentId, RefundStatus status);
 
     default BigDecimal sumSucceededAmount(Long tuitionBillId) {
         return findByTuitionBillIdAndStatus(tuitionBillId, RefundStatus.SUCCEEDED).stream()
+                .map(Refund::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    default BigDecimal sumSucceededAmountByPayment(Long paymentId) {
+        return findByPaymentIdAndStatus(paymentId, RefundStatus.SUCCEEDED).stream()
                 .map(Refund::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }

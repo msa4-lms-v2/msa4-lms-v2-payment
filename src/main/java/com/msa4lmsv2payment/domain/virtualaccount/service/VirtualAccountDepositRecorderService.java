@@ -91,9 +91,11 @@ public class VirtualAccountDepositRecorderService {
             return; // PARTIALLY_DEPOSITED - 나머지 입금을 기다린다.
         }
 
+        // pgTransactionId는 이 회차 입금의 거래키(transactionKey)가 아니라 계좌 발급 시점의 paymentKey를 쓴다 -
+        // 나중에 이 결제를 취소(환불)하려면 토스 cancel API가 paymentKey를 요구하기 때문이다.
         Payment payment = new Payment(tuitionBill.getId(), tuitionBill.getStudentId(), netDue, PaymentMethod.VIRTUAL_ACCOUNT,
                 PaymentStatus.REQUESTED, installmentPlanItemId);
-        payment.succeed(transactionKey);
+        payment.succeed(virtualAccount.getPaymentKey());
         Payment savedPayment = paymentResultRecorder.saveWithAudit(SYSTEM_ACTOR_ID, payment, null);
 
         if (installmentPlanItemId != null) {

@@ -93,7 +93,7 @@ class InstallmentVirtualAccountIntegrationTest {
                 new InstallmentPlanItem(plan.getId(), 2, BigDecimal.valueOf(450_000), LocalDate.now().plusDays(40)));
 
         when(tossPaymentsClient.issueVirtualAccount(any(), any(), eq(BigDecimal.valueOf(450_000)), any(), any()))
-                .thenReturn(new TossVirtualAccountIssueResponse("secret-round1",
+                .thenReturn(new TossVirtualAccountIssueResponse("pk-round1-issue", "secret-round1",
                         new TossVirtualAccountIssueResponse.VirtualAccountInfo("110-9999", "020", null)));
 
         virtualAccountService.issueVirtualAccount(ADMIN,
