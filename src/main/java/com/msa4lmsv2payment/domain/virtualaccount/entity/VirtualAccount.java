@@ -16,6 +16,8 @@ import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.LocalDateTime;
 
 @Entity
@@ -71,7 +73,8 @@ public class VirtualAccount {
     }
 
     public boolean matchesSecret(String candidate) {
-        return this.secret.equals(candidate);
+        return this.secret != null && candidate != null && MessageDigest.isEqual(
+                this.secret.getBytes(StandardCharsets.UTF_8), candidate.getBytes(StandardCharsets.UTF_8));
     }
 
     // 토스 가상계좌 발급 응답의 paymentKey - 발급 직후 한 번만 채워지며, 이후 이 계좌를 취소(환불)할 때 사용한다.

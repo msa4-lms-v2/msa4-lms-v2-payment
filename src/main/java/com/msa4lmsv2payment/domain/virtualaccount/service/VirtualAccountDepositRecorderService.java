@@ -53,20 +53,13 @@ public class VirtualAccountDepositRecorderService {
     private final AuditLogRecorder auditLogRecorder;
 
     @Transactional
-    public void recordDeposit(Long virtualAccountId, BigDecimal amount, String transactionKey) {
+    public void recordDeposit(Long virtualAccountId, BigDecimal amount, String transactionKey,
+                              String webhookEventId, LocalDateTime receivedAt) {
         VirtualAccount virtualAccount = virtualAccountRepository.findById(virtualAccountId)
                 .orElseThrow(() -> new VirtualAccountNotFoundException("가상계좌를 찾을 수 없습니다: " + virtualAccountId));
 
-        VirtualAccountDeposit deposit;
-        try {
-            deposit = virtualAccountDepositRepository.save(
-                    new VirtualAccountDeposit(virtualAccountId, amount, transactionKey, LocalDateTime.now()));
-        } catch (DataIntegrityViolationException e) {
-            // processDeposit의 existsByTossTransactionKey 조회와 이 save() 사이의 경쟁 조건 -
-            // 동시에 들어온 다른 Webhook 요청이 먼저 커밋했다는 뜻이라 UNIQUE 제약이 대신 막아준 것이다. 이미 처리된 건이므로 그대로 무시한다.
-            log.info("동시 요청으로 이미 처리된 가상계좌 입금 Webhook, 무시함 [virtualAccountId={}, transactionKey={}]", virtualAccountId, transactionKey);
-            return;
-        }
+        VirtualAccountDeposit deposit = virtualAccountDepositRepository.save(
+                new VirtualAccountDeposit(virtualAccountId, amount, transactionKey, webhookEventId, receivedAt));
         auditLogRecorder.record(SYSTEM_ACTOR_ID, AuditAction.VIRTUAL_ACCOUNT_DEPOSIT_RECEIVED, "VIRTUAL_ACCOUNT", virtualAccountId,
                 Map.of("depositId", deposit.getId(), "amount", amount), null);
 
