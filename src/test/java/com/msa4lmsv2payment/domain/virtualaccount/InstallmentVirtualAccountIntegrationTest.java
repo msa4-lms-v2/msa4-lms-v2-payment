@@ -106,7 +106,7 @@ class InstallmentVirtualAccountIntegrationTest {
         when(tossPaymentsClient.getPaymentByOrderId(eq(account.getOrderId())))
                 .thenReturn(new TossPaymentResponse("pk-round1", account.getOrderId(), "DONE", 450_000L));
 
-        virtualAccountDepositService.processDeposit(new TossVirtualAccountDepositWebhookRequest(
+        virtualAccountDepositService.processDeposit("event-round1", java.time.Instant.now().toString(), new TossVirtualAccountDepositWebhookRequest(
                 "secret-round1", "DONE", "tx-round1", account.getOrderId(), "2026-09-07T10:00:00"));
 
         assertThat(installmentPlanItemRepository.findById(round1.getId()).orElseThrow().getStatus())

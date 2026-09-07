@@ -107,7 +107,7 @@ class VirtualAccountExpirationIntegrationTest {
         when(tossPaymentsClient.getPaymentByOrderId(eq(account.getOrderId())))
                 .thenReturn(new TossPaymentResponse("pk-expired", account.getOrderId(), "DONE", 500_000L));
 
-        virtualAccountDepositService.processDeposit(new TossVirtualAccountDepositWebhookRequest(
+        virtualAccountDepositService.processDeposit("event-expired-1", java.time.Instant.now().toString(), new TossVirtualAccountDepositWebhookRequest(
                 "secret-expired", "DONE", "tx-expired-1", account.getOrderId(), "2026-09-07T10:00:00"));
 
         assertThat(virtualAccountDepositRepository.findByVirtualAccountId(account.getId())).hasSize(1);

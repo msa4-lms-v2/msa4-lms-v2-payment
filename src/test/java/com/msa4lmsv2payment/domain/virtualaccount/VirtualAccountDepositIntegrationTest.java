@@ -104,8 +104,9 @@ class VirtualAccountDepositIntegrationTest {
         TossVirtualAccountDepositWebhookRequest webhook = new TossVirtualAccountDepositWebhookRequest(
                 "secret-1", "DONE", "tx-duplicate-1", account.getOrderId(), "2026-09-07T10:00:00");
 
-        virtualAccountDepositService.processDeposit(webhook);
-        virtualAccountDepositService.processDeposit(webhook); // 동일 transactionKey 재전송
+        String transmissionTime = java.time.Instant.now().toString();
+        virtualAccountDepositService.processDeposit("event-duplicate-1", transmissionTime, webhook);
+        virtualAccountDepositService.processDeposit("event-duplicate-1", transmissionTime, webhook); // 동일 이벤트 재전송
 
         assertThat(virtualAccountDepositRepository.findByVirtualAccountId(account.getId())).hasSize(1);
         assertThat(paymentRepository.findByTuitionBillIdAndStatus(bill.getId(), PaymentStatus.SUCCEEDED)).hasSize(1);
@@ -123,14 +124,14 @@ class VirtualAccountDepositIntegrationTest {
                 .thenReturn(new TossPaymentResponse("pk-2a", account.getOrderId(), "DONE", 400_000L))
                 .thenReturn(new TossPaymentResponse("pk-2b", account.getOrderId(), "DONE", 600_000L));
 
-        virtualAccountDepositService.processDeposit(new TossVirtualAccountDepositWebhookRequest(
+        virtualAccountDepositService.processDeposit("event-partial-1", java.time.Instant.now().toString(), new TossVirtualAccountDepositWebhookRequest(
                 "secret-2", "DONE", "tx-partial-1", account.getOrderId(), "2026-09-07T10:00:00"));
 
         VirtualAccount afterPartial = virtualAccountRepository.findById(account.getId()).orElseThrow();
         assertThat(afterPartial.getStatus()).isEqualTo(VirtualAccountStatus.PARTIALLY_DEPOSITED);
         assertThat(tuitionBillRepository.findById(bill.getId()).orElseThrow().getStatus()).isEqualTo(TuitionBillStatus.UNPAID);
 
-        virtualAccountDepositService.processDeposit(new TossVirtualAccountDepositWebhookRequest(
+        virtualAccountDepositService.processDeposit("event-partial-2", java.time.Instant.now().toString(), new TossVirtualAccountDepositWebhookRequest(
                 "secret-2", "DONE", "tx-partial-2", account.getOrderId(), "2026-09-07T10:05:00"));
 
         VirtualAccount afterFull = virtualAccountRepository.findById(account.getId()).orElseThrow();
@@ -150,7 +151,7 @@ class VirtualAccountDepositIntegrationTest {
         when(tossPaymentsClient.getPaymentByOrderId(eq(account.getOrderId())))
                 .thenReturn(new TossPaymentResponse("pk-3", account.getOrderId(), "DONE", 1_200_000L));
 
-        virtualAccountDepositService.processDeposit(new TossVirtualAccountDepositWebhookRequest(
+        virtualAccountDepositService.processDeposit("event-overpay-1", java.time.Instant.now().toString(), new TossVirtualAccountDepositWebhookRequest(
                 "secret-3", "DONE", "tx-overpay-1", account.getOrderId(), "2026-09-07T10:00:00"));
 
         assertThat(refundRepository.findByTuitionBillIdAndRefundType(bill.getId(), RefundType.EXCESS_DEPOSIT))

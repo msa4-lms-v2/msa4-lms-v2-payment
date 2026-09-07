@@ -102,13 +102,27 @@ CREATE TABLE IF NOT EXISTS virtual_account_deposits (
     id                  BIGINT AUTO_INCREMENT PRIMARY KEY,
     virtual_account_id  BIGINT NOT NULL,
     amount              DECIMAL(12, 0) NOT NULL,
-    toss_transaction_key VARCHAR(100) NOT NULL COMMENT '중복 Webhook 수신 방지용 - 토스 응답에 명시적 거래키가 없으면 계좌+금액+통보시각 조합으로 대체',
+    toss_transaction_key VARCHAR(200) NOT NULL COMMENT '동일 가상계좌 거래의 중복 반영 방지용 Toss 거래키',
+    webhook_event_id    VARCHAR(200) NOT NULL COMMENT 'tosspayments-webhook-transmission-id, 동일 Webhook 재전송 방지용',
     received_at         DATETIME NOT NULL COMMENT '토스가 통보한 입금 시각',
     created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uk_virtual_account_deposits_transaction_key (toss_transaction_key),
+    UNIQUE KEY uk_virtual_account_deposits_event (webhook_event_id),
     INDEX idx_virtual_account_deposits_virtual_account_id (virtual_account_id),
     CONSTRAINT fk_virtual_account_deposits_virtual_account FOREIGN KEY (virtual_account_id) REFERENCES virtual_accounts (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 기존 입금 테이블에는 Webhook 전송 ID가 없으므로 재실행 가능한 migration으로 추가한다.
+SET @virtual_account_deposits_event_id_exists = (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'virtual_account_deposits' AND COLUMN_NAME = 'webhook_event_id'
+);
+SET @virtual_account_deposits_event_id_ddl = IF(@virtual_account_deposits_event_id_exists = 0,
+    'ALTER TABLE virtual_account_deposits ADD COLUMN webhook_event_id VARCHAR(200), ADD CONSTRAINT uk_virtual_account_deposits_event UNIQUE (webhook_event_id)',
+    'SELECT 1');
+PREPARE virtual_account_deposits_event_id_stmt FROM @virtual_account_deposits_event_id_ddl;
+EXECUTE virtual_account_deposits_event_id_stmt;
+DEALLOCATE PREPARE virtual_account_deposits_event_id_stmt;
 
 CREATE TABLE IF NOT EXISTS refunds (
     id                  BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -403,26 +417,6 @@ CREATE TABLE IF NOT EXISTS scholarship_applications (
     CONSTRAINT fk_scholarship_applications_scholarship FOREIGN KEY (scholarship_id) REFERENCES scholarships (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 2026-09-04: Toss 가상계좌 DEPOSIT_CALLBACK 인증·중복 처리.
--- secret은 발급 응답과 Webhook 요청을 대조할 때만 사용하므로 로그나 API 응답에 노출하지 않는다.
--- 기존 발급 행에는 두 값을 복구할 수 없으므로 nullable로 추가한다. 신규 발급부터는 애플리케이션이 항상 채운다.
-ALTER TABLE virtual_accounts ADD COLUMN order_id VARCHAR(64);
-ALTER TABLE virtual_accounts ADD COLUMN secret VARCHAR(255);
-ALTER TABLE virtual_accounts ADD CONSTRAINT uk_virtual_accounts_order_id UNIQUE (order_id);
-
-CREATE TABLE IF NOT EXISTS virtual_account_deposits (
-    id                    BIGINT AUTO_INCREMENT PRIMARY KEY,
-    virtual_account_id    BIGINT NOT NULL,
-    amount                DECIMAL(12, 0) NOT NULL,
-    toss_transaction_key  VARCHAR(200) NOT NULL,
-    webhook_event_id      VARCHAR(200) NOT NULL,
-    received_at           DATETIME NOT NULL,
-    created_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY uk_virtual_account_deposits_transaction (toss_transaction_key),
-    UNIQUE KEY uk_virtual_account_deposits_event (webhook_event_id),
-    INDEX idx_virtual_account_deposits_account (virtual_account_id),
-    CONSTRAINT fk_virtual_account_deposits_account
-        FOREIGN KEY (virtual_account_id) REFERENCES virtual_accounts (id)
 -- Academic→Payment Kafka 이벤트 연동 스냅샷 (2026-09-04)
 CREATE TABLE IF NOT EXISTS student_snapshots (
     student_id BIGINT NOT NULL,
