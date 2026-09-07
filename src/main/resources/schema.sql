@@ -212,3 +212,25 @@ CREATE TABLE IF NOT EXISTS scholarship_applications (
     CONSTRAINT fk_scholarship_applications_tuition_bill FOREIGN KEY (tuition_bill_id) REFERENCES tuition_bills (id),
     CONSTRAINT fk_scholarship_applications_scholarship FOREIGN KEY (scholarship_id) REFERENCES scholarships (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 2026-09-04: Toss 가상계좌 DEPOSIT_CALLBACK 인증·중복 처리.
+-- secret은 발급 응답과 Webhook 요청을 대조할 때만 사용하므로 로그나 API 응답에 노출하지 않는다.
+-- 기존 발급 행에는 두 값을 복구할 수 없으므로 nullable로 추가한다. 신규 발급부터는 애플리케이션이 항상 채운다.
+ALTER TABLE virtual_accounts ADD COLUMN order_id VARCHAR(64);
+ALTER TABLE virtual_accounts ADD COLUMN secret VARCHAR(255);
+ALTER TABLE virtual_accounts ADD CONSTRAINT uk_virtual_accounts_order_id UNIQUE (order_id);
+
+CREATE TABLE IF NOT EXISTS virtual_account_deposits (
+    id                    BIGINT AUTO_INCREMENT PRIMARY KEY,
+    virtual_account_id    BIGINT NOT NULL,
+    amount                DECIMAL(12, 0) NOT NULL,
+    toss_transaction_key  VARCHAR(200) NOT NULL,
+    webhook_event_id      VARCHAR(200) NOT NULL,
+    received_at           DATETIME NOT NULL,
+    created_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_virtual_account_deposits_transaction (toss_transaction_key),
+    UNIQUE KEY uk_virtual_account_deposits_event (webhook_event_id),
+    INDEX idx_virtual_account_deposits_account (virtual_account_id),
+    CONSTRAINT fk_virtual_account_deposits_account
+        FOREIGN KEY (virtual_account_id) REFERENCES virtual_accounts (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

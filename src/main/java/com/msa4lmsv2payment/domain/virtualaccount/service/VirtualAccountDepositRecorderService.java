@@ -47,12 +47,13 @@ public class VirtualAccountDepositRecorderService {
     private final AuditLogRecorder auditLogRecorder;
 
     @Transactional
-    public void recordDeposit(Long virtualAccountId, BigDecimal amount, String transactionKey) {
+    public void recordDeposit(Long virtualAccountId, BigDecimal amount, String transactionKey,
+                              String webhookEventId, LocalDateTime receivedAt) {
         VirtualAccount virtualAccount = virtualAccountRepository.findById(virtualAccountId)
                 .orElseThrow(() -> new VirtualAccountNotFoundException("가상계좌를 찾을 수 없습니다: " + virtualAccountId));
 
         VirtualAccountDeposit deposit = virtualAccountDepositRepository.save(
-                new VirtualAccountDeposit(virtualAccountId, amount, transactionKey, LocalDateTime.now()));
+                new VirtualAccountDeposit(virtualAccountId, amount, transactionKey, webhookEventId, receivedAt));
         auditLogRecorder.record(SYSTEM_ACTOR_ID, AuditAction.VIRTUAL_ACCOUNT_DEPOSIT_RECEIVED, "VIRTUAL_ACCOUNT", virtualAccountId,
                 Map.of("depositId", deposit.getId(), "amount", amount), null);
 

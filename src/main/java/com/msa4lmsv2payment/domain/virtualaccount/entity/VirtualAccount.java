@@ -16,6 +16,8 @@ import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.LocalDateTime;
 
 @Entity
@@ -60,7 +62,8 @@ public class VirtualAccount {
     }
 
     public boolean matchesSecret(String candidate) {
-        return this.secret.equals(candidate);
+        return this.secret != null && candidate != null && MessageDigest.isEqual(
+                this.secret.getBytes(StandardCharsets.UTF_8), candidate.getBytes(StandardCharsets.UTF_8));
     }
 
     // 누적 입금액을 순납부액과 비교해 상태를 갱신한다. 초과분은 호출한 쪽이 환불로 처리한다.

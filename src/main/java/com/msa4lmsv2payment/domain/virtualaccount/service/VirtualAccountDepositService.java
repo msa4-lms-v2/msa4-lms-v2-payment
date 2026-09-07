@@ -13,8 +13,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.math.BigDecimal;
+import java.time.DateTimeException;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 
 /**
  * 가상계좌 입금 Webhook 처리.
@@ -27,6 +34,9 @@ import java.math.BigDecimal;
 @RequiredArgsConstructor
 public class VirtualAccountDepositService {
 
+    private static final Duration MAX_TRANSMISSION_AGE = Duration.ofMinutes(10);
+    private static final ZoneId TOSS_ZONE = ZoneId.of("Asia/Seoul");
+
     private final VirtualAccountRepository virtualAccountRepository;
     private final VirtualAccountDepositRepository virtualAccountDepositRepository;
     private final TossPaymentsClient tossPaymentsClient;
@@ -34,7 +44,18 @@ public class VirtualAccountDepositService {
 
     // 토스 재조회(외부 호출)를 트랜잭션 밖에서 실행하고, 실제 저장은 depositRecorder(별도 트랜잭션)에 위임한다.
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    public void processDeposit(TossVirtualAccountDepositWebhookRequest webhook) {
+    public void processDeposit(String transmissionId, String transmissionTime,
+                               TossVirtualAccountDepositWebhookRequest webhook) {
+        if (transmissionId == null || transmissionId.isBlank()) {
+            throw new VirtualAccountSecretMismatchException("Webhook 전송 ID가 비어 있습니다.");
+        }
+        Instant transmittedAt = parseTimestamp(transmissionTime);
+        Instant eventCreatedAt = parseTimestamp(webhook.createdAt());
+        Instant now = Instant.now();
+        if (transmittedAt.isBefore(now.minus(MAX_TRANSMISSION_AGE)) || transmittedAt.isAfter(now.plusSeconds(60))) {
+            throw new VirtualAccountSecretMismatchException("Webhook 전송 시간이 허용 범위를 벗어났습니다.");
+        }
+
         VirtualAccount virtualAccount = virtualAccountRepository.findByOrderId(webhook.orderId())
                 .orElseThrow(() -> new VirtualAccountNotFoundException("존재하지 않는 orderId입니다: " + webhook.orderId()));
 
@@ -42,17 +63,43 @@ public class VirtualAccountDepositService {
             throw new VirtualAccountSecretMismatchException("가상계좌 입금 Webhook의 secret이 일치하지 않습니다.");
         }
 
-        if (virtualAccountDepositRepository.existsByTossTransactionKey(webhook.transactionKey())) {
+        if (virtualAccountDepositRepository.existsByWebhookEventId(transmissionId)
+                || virtualAccountDepositRepository.existsByTossTransactionKey(webhook.transactionKey())) {
             log.info("이미 처리된 가상계좌 입금 Webhook, 무시함 [orderId={}, transactionKey={}]", webhook.orderId(), webhook.transactionKey());
             return;
         }
 
         TossPaymentResponse tossPayment = tossPaymentsClient.getPaymentByOrderId(webhook.orderId());
+        if (!webhook.orderId().equals(tossPayment.orderId()) || !webhook.status().equals(tossPayment.status())) {
+            throw new VirtualAccountSecretMismatchException("Webhook 내용과 Toss 결제 조회 결과가 일치하지 않습니다.");
+        }
         if (!tossPayment.isDone() || tossPayment.totalAmount() == null) {
             log.info("입금 미완료 상태의 Webhook, 무시함 [orderId={}, status={}]", webhook.orderId(), tossPayment.status());
             return;
         }
 
-        depositRecorder.recordDeposit(virtualAccount.getId(), BigDecimal.valueOf(tossPayment.totalAmount()), webhook.transactionKey());
+        try {
+            depositRecorder.recordDeposit(virtualAccount.getId(), BigDecimal.valueOf(tossPayment.totalAmount()),
+                    webhook.transactionKey(), transmissionId, eventCreatedAt.atZone(TOSS_ZONE).toLocalDateTime());
+        } catch (DataIntegrityViolationException duplicate) {
+            log.info("동시에 중복 수신된 가상계좌 Webhook, 무시함 [eventId={}, transactionKey={}]",
+                    transmissionId, webhook.transactionKey());
+        }
+    }
+
+    private Instant parseTimestamp(String value) {
+        try {
+            if (value.chars().allMatch(Character::isDigit)) {
+                long epoch = Long.parseLong(value);
+                return value.length() > 10 ? Instant.ofEpochMilli(epoch) : Instant.ofEpochSecond(epoch);
+            }
+            try {
+                return OffsetDateTime.parse(value).toInstant();
+            } catch (DateTimeException ignored) {
+                return LocalDateTime.parse(value).atZone(TOSS_ZONE).toInstant();
+            }
+        } catch (DateTimeException | NumberFormatException e) {
+            throw new VirtualAccountSecretMismatchException("Webhook timestamp 형식이 올바르지 않습니다.");
+        }
     }
 }

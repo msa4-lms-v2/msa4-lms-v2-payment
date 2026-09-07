@@ -10,6 +10,8 @@ public interface VirtualAccountDepositRepository extends JpaRepository<VirtualAc
 
     boolean existsByTossTransactionKey(String tossTransactionKey);
 
+    boolean existsByWebhookEventId(String webhookEventId);
+
     List<VirtualAccountDeposit> findByVirtualAccountId(Long virtualAccountId);
 
     default BigDecimal sumAmount(Long virtualAccountId) {

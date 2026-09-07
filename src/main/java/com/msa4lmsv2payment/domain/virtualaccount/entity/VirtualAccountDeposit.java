@@ -34,15 +34,19 @@ public class VirtualAccountDeposit {
 
     private String tossTransactionKey;
 
+    private String webhookEventId;
+
     private LocalDateTime receivedAt;
 
     @CreatedDate
     private LocalDateTime createdAt;
 
-    public VirtualAccountDeposit(Long virtualAccountId, BigDecimal amount, String tossTransactionKey, LocalDateTime receivedAt) {
+    public VirtualAccountDeposit(Long virtualAccountId, BigDecimal amount, String tossTransactionKey,
+                                 String webhookEventId, LocalDateTime receivedAt) {
         this.virtualAccountId = virtualAccountId;
         this.amount = amount;
         this.tossTransactionKey = tossTransactionKey;
+        this.webhookEventId = webhookEventId;
         this.receivedAt = receivedAt;
     }
 }
