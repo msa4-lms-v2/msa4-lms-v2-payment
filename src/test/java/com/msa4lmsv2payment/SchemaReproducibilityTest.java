@@ -40,6 +40,9 @@ class SchemaReproducibilityTest {
             assertThat(columnExists(connection, "payments", "installment_plan_item_id")).isTrue();
             assertThat(columnExists(connection, "refunds", "retry_count")).isTrue();
             assertThat(columnExists(connection, "virtual_accounts", "installment_plan_item_id")).isTrue();
+            assertThat(columnExists(connection, "virtual_accounts", "payment_key")).isTrue();
+            assertThat(columnExists(connection, "refunds", "refund_dedup_key")).isTrue();
+            assertThat(columnExists(connection, "refunds", "refund_bank_code")).isTrue();
         }
     }
 
