@@ -23,8 +23,6 @@ import com.msa4lmsv2payment.global.audit.AuditAction;
 import com.msa4lmsv2payment.global.audit.AuditLogRecorder;
 import com.msa4lmsv2payment.global.error.VirtualAccountNotFoundException;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,7 +34,6 @@ import java.util.Map;
  * 가상계좌 입금 저장, 계좌 상태 갱신, 완납 시 결제·초과입금 환불 기록을 하나의 트랜잭션으로 묶는다.
  * Webhook은 로그인 사용자가 없는 시스템 요청이라 감사 로그의 actor_id는 예약 값 0(SYSTEM)을 쓴다.
  */
-@Slf4j
 @Component
 @RequiredArgsConstructor
 public class VirtualAccountDepositRecorderService {
@@ -53,20 +50,13 @@ public class VirtualAccountDepositRecorderService {
     private final AuditLogRecorder auditLogRecorder;
 
     @Transactional
-    public void recordDeposit(Long virtualAccountId, BigDecimal amount, String transactionKey) {
+    public void recordDeposit(Long virtualAccountId, BigDecimal amount, String transactionKey,
+                              String webhookEventId, LocalDateTime receivedAt) {
         VirtualAccount virtualAccount = virtualAccountRepository.findById(virtualAccountId)
                 .orElseThrow(() -> new VirtualAccountNotFoundException("가상계좌를 찾을 수 없습니다: " + virtualAccountId));
 
-        VirtualAccountDeposit deposit;
-        try {
-            deposit = virtualAccountDepositRepository.save(
-                    new VirtualAccountDeposit(virtualAccountId, amount, transactionKey, LocalDateTime.now()));
-        } catch (DataIntegrityViolationException e) {
-            // processDeposit의 existsByTossTransactionKey 조회와 이 save() 사이의 경쟁 조건 -
-            // 동시에 들어온 다른 Webhook 요청이 먼저 커밋했다는 뜻이라 UNIQUE 제약이 대신 막아준 것이다. 이미 처리된 건이므로 그대로 무시한다.
-            log.info("동시 요청으로 이미 처리된 가상계좌 입금 Webhook, 무시함 [virtualAccountId={}, transactionKey={}]", virtualAccountId, transactionKey);
-            return;
-        }
+        VirtualAccountDeposit deposit = virtualAccountDepositRepository.save(
+                new VirtualAccountDeposit(virtualAccountId, amount, transactionKey, webhookEventId, receivedAt));
         auditLogRecorder.record(SYSTEM_ACTOR_ID, AuditAction.VIRTUAL_ACCOUNT_DEPOSIT_RECEIVED, "VIRTUAL_ACCOUNT", virtualAccountId,
                 Map.of("depositId", deposit.getId(), "amount", amount), null);
 
@@ -119,18 +109,13 @@ public class VirtualAccountDepositRecorderService {
      * 정상 완납 흐름(고지 상태 변경·결제 생성)은 타지 않고 전액을 즉시 환불 대상으로 돌린다.
      */
     @Transactional
-    public void recordExpiredAccountDeposit(Long virtualAccountId, BigDecimal amount, String transactionKey) {
+    public void recordExpiredAccountDeposit(Long virtualAccountId, BigDecimal amount, String transactionKey,
+                                            String webhookEventId, LocalDateTime receivedAt) {
         VirtualAccount virtualAccount = virtualAccountRepository.findById(virtualAccountId)
                 .orElseThrow(() -> new VirtualAccountNotFoundException("가상계좌를 찾을 수 없습니다: " + virtualAccountId));
 
-        VirtualAccountDeposit deposit;
-        try {
-            deposit = virtualAccountDepositRepository.save(
-                    new VirtualAccountDeposit(virtualAccountId, amount, transactionKey, LocalDateTime.now()));
-        } catch (DataIntegrityViolationException e) {
-            log.info("동시 요청으로 이미 처리된 가상계좌 입금 Webhook, 무시함 [virtualAccountId={}, transactionKey={}]", virtualAccountId, transactionKey);
-            return;
-        }
+        VirtualAccountDeposit deposit = virtualAccountDepositRepository.save(
+                new VirtualAccountDeposit(virtualAccountId, amount, transactionKey, webhookEventId, receivedAt));
         auditLogRecorder.record(SYSTEM_ACTOR_ID, AuditAction.VIRTUAL_ACCOUNT_DEPOSIT_RECEIVED, "VIRTUAL_ACCOUNT", virtualAccountId,
                 Map.of("depositId", deposit.getId(), "amount", amount, "accountExpired", true), null);
 

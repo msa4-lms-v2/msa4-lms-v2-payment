@@ -102,13 +102,27 @@ CREATE TABLE IF NOT EXISTS virtual_account_deposits (
     id                  BIGINT AUTO_INCREMENT PRIMARY KEY,
     virtual_account_id  BIGINT NOT NULL,
     amount              DECIMAL(12, 0) NOT NULL,
-    toss_transaction_key VARCHAR(100) NOT NULL COMMENT '중복 Webhook 수신 방지용 - 토스 응답에 명시적 거래키가 없으면 계좌+금액+통보시각 조합으로 대체',
+    toss_transaction_key VARCHAR(200) NOT NULL COMMENT '동일 가상계좌 거래의 중복 반영 방지용 Toss 거래키',
+    webhook_event_id    VARCHAR(200) NOT NULL COMMENT 'tosspayments-webhook-transmission-id, 동일 Webhook 재전송 방지용',
     received_at         DATETIME NOT NULL COMMENT '토스가 통보한 입금 시각',
     created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uk_virtual_account_deposits_transaction_key (toss_transaction_key),
+    UNIQUE KEY uk_virtual_account_deposits_event (webhook_event_id),
     INDEX idx_virtual_account_deposits_virtual_account_id (virtual_account_id),
     CONSTRAINT fk_virtual_account_deposits_virtual_account FOREIGN KEY (virtual_account_id) REFERENCES virtual_accounts (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 기존 입금 테이블에는 Webhook 전송 ID가 없으므로 재실행 가능한 migration으로 추가한다.
+SET @virtual_account_deposits_event_id_exists = (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'virtual_account_deposits' AND COLUMN_NAME = 'webhook_event_id'
+);
+SET @virtual_account_deposits_event_id_ddl = IF(@virtual_account_deposits_event_id_exists = 0,
+    'ALTER TABLE virtual_account_deposits ADD COLUMN webhook_event_id VARCHAR(200), ADD CONSTRAINT uk_virtual_account_deposits_event UNIQUE (webhook_event_id)',
+    'SELECT 1');
+PREPARE virtual_account_deposits_event_id_stmt FROM @virtual_account_deposits_event_id_ddl;
+EXECUTE virtual_account_deposits_event_id_stmt;
+DEALLOCATE PREPARE virtual_account_deposits_event_id_stmt;
 
 CREATE TABLE IF NOT EXISTS refunds (
     id                  BIGINT AUTO_INCREMENT PRIMARY KEY,

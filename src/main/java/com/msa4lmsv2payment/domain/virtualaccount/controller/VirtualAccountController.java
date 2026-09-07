@@ -19,6 +19,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -46,9 +47,12 @@ public class VirtualAccountController {
     @Operation(summary = "가상계좌 입금 Webhook", description = "토스페이먼츠가 가상계좌 입금 발생 시 호출한다. 로그인 사용자 없는 시스템 요청 - secret으로 인증한다.")
     @ApiResponse(responseCode = "200", description = "처리 완료(신규 반영 또는 이미 처리된 건이라 무시)")
     @CustomApiResponse({CustomResponseCode.ACCESS_DENIED, CustomResponseCode.NOT_FOUND_DATA})
-    @PostMapping("/api/payment/webhooks/toss/virtual-account-deposits")
-    public GlobalResponseDTO<Void> receiveVirtualAccountDeposit(@RequestBody @Valid TossVirtualAccountDepositWebhookRequest request) {
-        virtualAccountDepositService.processDeposit(request);
+    @PostMapping({"/api/payment/webhooks/toss", "/api/payment/webhooks/toss/virtual-account-deposits"})
+    public GlobalResponseDTO<Void> receiveVirtualAccountDeposit(
+            @RequestHeader("tosspayments-webhook-transmission-id") String transmissionId,
+            @RequestHeader("tosspayments-webhook-transmission-time") String transmissionTime,
+            @RequestBody @Valid TossVirtualAccountDepositWebhookRequest request) {
+        virtualAccountDepositService.processDeposit(transmissionId, transmissionTime, request);
         return GlobalResponseDTO.success();
     }
 }
