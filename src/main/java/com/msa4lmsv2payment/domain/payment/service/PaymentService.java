@@ -21,6 +21,8 @@ import com.msa4lmsv2payment.domain.payment.response.PaymentAmountValidationRespo
 import com.msa4lmsv2payment.domain.payment.response.PaymentHistoryResponseDTO;
 import com.msa4lmsv2payment.domain.payment.response.PaymentResponseDTO;
 import com.msa4lmsv2payment.domain.payment.response.PaymentSummaryResponseDTO;
+import com.msa4lmsv2payment.domain.payment.response.AcademicTuitionStatusResponseDTO;
+import com.msa4lmsv2payment.domain.refund.entity.RefundStatus;
 import com.msa4lmsv2payment.domain.scholarship.request.PaymentScholarshipAllocationRequestDTO;
 import com.msa4lmsv2payment.domain.scholarship.response.PaymentScholarshipAllocationResponseDTO;
 import com.msa4lmsv2payment.domain.scholarship.service.ScholarshipService;
@@ -187,6 +189,24 @@ public class PaymentService {
         return new PaymentSummaryResponseDTO(
                 tuitionBillId, tuitionBill.getBillingAmount(), allocation.totalScholarshipAmount(),
                 totalPaid, remaining, tuitionBill.getStatus());
+    }
+
+    // Academic이 학생·학기별 납부 상태를 조회할 때(SCRUM-176) 이 메서드를 거친다 - 시스템 호출이라 CurrentUser/소유권 검증이 없다.
+    // docs-v2/MSA-LMS_INTEGRATION.md "Academic → Payment 조회" 계약.
+    public AcademicTuitionStatusResponseDTO getTuitionStatusForAcademic(Long studentId, Long semesterId) {
+        TuitionBill tuitionBill = tuitionBillService.getByStudentAndSemesterOrThrow(studentId, semesterId);
+
+        BigDecimal totalScholarship = scholarshipService.sumScholarshipAmount(tuitionBill.getId());
+        BigDecimal totalPaid = paymentRepository.sumSucceededAmount(tuitionBill.getId())
+                .subtract(refundRepository.sumSucceededAmount(tuitionBill.getId()))
+                .max(BigDecimal.ZERO);
+        BigDecimal remaining = tuitionBill.getBillingAmount().subtract(totalScholarship).subtract(totalPaid).max(BigDecimal.ZERO);
+        boolean hasPendingRefund = !refundRepository.findByTuitionBillIdAndStatus(tuitionBill.getId(), RefundStatus.REQUESTED).isEmpty()
+                || !refundRepository.findByTuitionBillIdAndStatus(tuitionBill.getId(), RefundStatus.RETRYING).isEmpty();
+
+        return new AcademicTuitionStatusResponseDTO(
+                tuitionBill.getId(), tuitionBill.getBillingAmount(), totalScholarship, totalPaid, remaining,
+                tuitionBill.getStatus(), hasPendingRefund);
     }
 
     // 학생 본인의 일괄납부/분할납부 이력 조회(등록금 신청 내역 화면용)
