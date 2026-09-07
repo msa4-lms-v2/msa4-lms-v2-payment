@@ -4,6 +4,7 @@ import com.msa4lmsv2payment.global.response.constant.CustomResponseCode;
 import com.msa4lmsv2payment.global.response.GlobalResponseDTO;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
@@ -27,6 +28,18 @@ public class GlobalExceptionHandler {
             log.warn("[{}] {}", c.getCode(), e.getMessage());
         }
         return ResponseEntity.status(c.getHttpStatus()).body(GlobalResponseDTO.fail(c, e.getMessage(), null));
+    }
+
+    // 자퇴 환불률 PENDING_ACADEMIC_VERIFICATION 보류 상태 저장 자체가 실패한 경우 전용 - BusinessException보다
+    // 더 구체적이라 Spring이 이 핸들러를 우선 매칭한다. 일반 5xx와 달리 Retry-After 헤더를 함께 내려준다.
+    @ExceptionHandler(RefundVerificationPersistFailedException.class)
+    public ResponseEntity<GlobalResponseDTO<Void>> handleRefundVerificationPersistFailedException(
+            RefundVerificationPersistFailedException e) {
+        CustomResponseCode c = e.getCode();
+        log.error("[{}] {}", c.getCode(), e.getMessage(), e);
+        return ResponseEntity.status(c.getHttpStatus())
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(e.getRetryAfterSeconds()))
+                .body(GlobalResponseDTO.fail(c, e.getMessage(), null));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

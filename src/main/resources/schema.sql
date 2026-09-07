@@ -448,3 +448,17 @@ CREATE TABLE IF NOT EXISTS withdrawal_snapshots (
     PRIMARY KEY (withdrawal_id),
     INDEX idx_withdrawal_snapshots_student_id (student_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 2026-09-07: 자퇴 환불률 산정 장애 격리 - refunds.status에 PENDING_ACADEMIC_VERIFICATION/MANUAL_REVIEW_REQUIRED 추가.
+-- 기존 CREATE TABLE 문(refunds, 위)은 손대지 않고 ALTER로만 반영한다 - "PENDING_ACADEMIC_VERIFICATION"이
+-- 30자라 기존 VARCHAR(20)로는 길이가 부족해 폭을 넓힌다.
+SET @refunds_status_length = (
+    SELECT CHARACTER_MAXIMUM_LENGTH FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'refunds' AND COLUMN_NAME = 'status'
+);
+SET @refunds_status_widen_ddl = IF(@refunds_status_length < 32,
+    'ALTER TABLE refunds MODIFY COLUMN status VARCHAR(32) NOT NULL COMMENT ''REQUESTED, SUCCEEDED, FAILED, RETRYING, PENDING_ACADEMIC_VERIFICATION, MANUAL_REVIEW_REQUIRED''',
+    'SELECT 1');
+PREPARE refunds_status_widen_stmt FROM @refunds_status_widen_ddl;
+EXECUTE refunds_status_widen_stmt;
+DEALLOCATE PREPARE refunds_status_widen_stmt;

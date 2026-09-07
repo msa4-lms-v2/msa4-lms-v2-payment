@@ -14,7 +14,8 @@ public record RefundResponseDTO(
         @Schema(description = "환불 유형", allowableValues = {"WITHDRAWAL", "PG_CANCEL", "EXCESS_DEPOSIT"}, example = "WITHDRAWAL") RefundType refundType,
         @Schema(description = "환불 금액", example = "3499860") BigDecimal amount,
         @Schema(description = "적용된 환불률", example = "0.8333") BigDecimal refundRate,
-        @Schema(description = "환불 상태. SUCCEEDED에서는 금액과 환불률을 변경할 수 없음", allowableValues = {"REQUESTED", "SUCCEEDED", "FAILED", "RETRYING"}, example = "REQUESTED") RefundStatus status,
+        @Schema(description = "환불 상태. SUCCEEDED에서는 금액과 환불률을 변경할 수 없음. PENDING_ACADEMIC_VERIFICATION은 Academic 스냅샷 미반영으로 보류된 상태(자동 재검증), MANUAL_REVIEW_REQUIRED는 재검증 유예 시간을 넘겨 관리자 확인이 필요한 상태",
+                allowableValues = {"REQUESTED", "SUCCEEDED", "FAILED", "RETRYING", "PENDING_ACADEMIC_VERIFICATION", "MANUAL_REVIEW_REQUIRED"}, example = "REQUESTED") RefundStatus status,
         @Schema(description = "재시도 횟수. 3회 도달 시 추가 재시도 거부", example = "0") Integer retryCount
 ) {
     public static RefundResponseDTO from(Refund refund) {

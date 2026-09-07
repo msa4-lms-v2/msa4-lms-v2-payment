@@ -111,4 +111,32 @@ public class Refund {
         this.status = RefundStatus.RETRYING;
         this.completedAt = null;
     }
+
+    // Academic 스냅샷에 자퇴 건이 아직 반영되지 않아 환불률을 계산할 수 없을 때 보류 상태로 저장한다.
+    // amount/refundRate는 아직 계산 전이라 호출부가 0으로 채워 넣는다(NOT NULL 컬럼).
+    public void markPendingAcademicVerification(Long withdrawalId) {
+        if (status == RefundStatus.SUCCEEDED) {
+            throw new IllegalStateException("완료된 환불은 상태를 변경할 수 없습니다.");
+        }
+        this.withdrawalId = withdrawalId;
+        this.status = RefundStatus.PENDING_ACADEMIC_VERIFICATION;
+    }
+
+    // PENDING_ACADEMIC_VERIFICATION/MANUAL_REVIEW_REQUIRED 상태에서 재검증이 성공했을 때만 쓴다.
+    // REQUESTED/FAILED/RETRYING 상태의 금액 갱신은 기존 updateRate를 그대로 쓴다(이 메서드로 상태를 강제로
+    // REQUESTED로 되돌리지 않기 위해 분리했다).
+    public void confirmAcademicVerification(Long withdrawalId, BigDecimal amount, BigDecimal refundRate) {
+        if (status == RefundStatus.SUCCEEDED) {
+            throw new IllegalStateException("완료된 환불 금액과 환불률은 변경할 수 없습니다.");
+        }
+        this.withdrawalId = withdrawalId;
+        this.amount = amount;
+        this.refundRate = refundRate;
+        this.status = RefundStatus.REQUESTED;
+    }
+
+    // PENDING_ACADEMIC_VERIFICATION이 재검증 유예 시간을 넘겨도 해소되지 않을 때 관리자 확인으로 넘긴다.
+    public void requireManualReview() {
+        this.status = RefundStatus.MANUAL_REVIEW_REQUIRED;
+    }
 }
