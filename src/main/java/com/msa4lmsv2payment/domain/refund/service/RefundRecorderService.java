@@ -73,4 +73,22 @@ public class RefundRecorderService {
                 Map.of("amount", saved.getAmount()), reason);
         return saved;
     }
+
+    @Transactional
+    public Refund savePendingAcademicVerification(Long actorId, Refund refund, Long tuitionBillId) {
+        Refund saved = refundRepository.save(refund);
+        auditLogRecorder.record(actorId, AuditAction.REFUND_PENDING_ACADEMIC_VERIFICATION, "REFUND", saved.getId(),
+                Map.of("tuitionBillId", tuitionBillId, "withdrawalId", saved.getWithdrawalId()),
+                null);
+        return saved;
+    }
+
+    @Transactional
+    public Refund saveManualReviewRequired(Long actorId, Refund refund, String reason) {
+        Refund saved = refundRepository.save(refund);
+        auditLogRecorder.record(actorId, AuditAction.REFUND_MANUAL_REVIEW_REQUIRED, "REFUND", saved.getId(),
+                Map.of("tuitionBillId", saved.getTuitionBillId(), "withdrawalId", saved.getWithdrawalId()),
+                reason);
+        return saved;
+    }
 }

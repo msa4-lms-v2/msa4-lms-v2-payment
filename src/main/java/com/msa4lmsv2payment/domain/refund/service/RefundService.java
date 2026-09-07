@@ -6,11 +6,14 @@ import com.msa4lmsv2payment.domain.payment.service.PaymentService;
 import com.msa4lmsv2payment.domain.refund.entity.Refund;
 import com.msa4lmsv2payment.domain.refund.entity.RefundStatus;
 import com.msa4lmsv2payment.domain.refund.entity.RefundType;
+import com.msa4lmsv2payment.global.error.AcademicResourceNotFoundException;
 import com.msa4lmsv2payment.global.error.PaymentNotFoundException;
 import com.msa4lmsv2payment.global.error.RefundAmountExceedsPaymentException;
+import com.msa4lmsv2payment.global.error.RefundManualReviewRequiredException;
 import com.msa4lmsv2payment.global.error.RefundNotFoundException;
 import com.msa4lmsv2payment.global.error.RefundNotRetryableException;
 import com.msa4lmsv2payment.global.error.RefundRetryLimitExceededException;
+import com.msa4lmsv2payment.global.error.RefundVerificationPersistFailedException;
 import com.msa4lmsv2payment.global.error.TossPaymentRejectedException;
 import com.msa4lmsv2payment.global.error.TossServiceUnavailableException;
 import com.msa4lmsv2payment.global.error.TuitionBillAccessDeniedException;
@@ -34,6 +37,7 @@ import com.msa4lmsv2payment.global.client.TossPaymentsClient;
 import com.msa4lmsv2payment.global.client.TossRefundReceiveAccount;
 import com.msa4lmsv2payment.global.security.CurrentUser;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,12 +46,20 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class RefundService {
 
     private static final int MAX_RETRY_ATTEMPTS = 3;
+    // PENDING_ACADEMIC_VERIFICATION 저장 자체가 실패했을 때(DB 접근 불가 등) 안내하는 재시도 간격.
+    // 재검증 폴링 주기(RefundVerificationRetryScheduler, 10분)와 달리 이건 즉시 재시도를 유도하는 짧은 값이다 -
+    // DB 접속 문제는 대개 수 초~수십 초 내 해소되는 일시적 장애라고 본다.
+    private static final long PENDING_VERIFICATION_SAVE_RETRY_AFTER_SECONDS = 10;
+    // RefundVerificationRetryScheduler는 로그인 사용자가 없는 시스템 동작이라 OverdueTransitionScheduler와
+    // 동일하게 감사 로그의 actor_id는 예약 값 0(SYSTEM)을 쓴다.
+    private static final Long SYSTEM_ACTOR_ID = 0L;
 
     private final RefundRepository refundRepository;
     private final PaymentRepository paymentRepository;
@@ -78,10 +90,20 @@ public class RefundService {
     // Academic 호출 동안 DB 커넥션을 붙잡지 않도록 트랜잭션 밖에서 실행한다.
     // findByTuitionBillIdAndRefundType()가 반환한 엔티티는 그 조회 자체의 트랜잭션이 끝나며 detach되므로,
     // 변경 후 반드시 save()를 다시 호출해야 반영된다(더티체킹에 기대지 않는다).
+    // Academic 스냅샷에 자퇴 건이 아직 반영되지 않은 경우(AcademicResourceNotFoundException) 예외로 끝내지 않고
+    // PENDING_ACADEMIC_VERIFICATION으로 저장한다("장애 격리" 절, ARCHITECTURE.md). 컨트롤러는 응답의 status를 보고
+    // PENDING_ACADEMIC_VERIFICATION이면 202, 아니면 200을 내려준다.
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public RefundResponseDTO applyWithdrawalRefundRate(CurrentUser currentUser, WithdrawalRefundRateRequestDTO request) {
         TuitionBill tuitionBill = tuitionBillService.getOwnedTuitionBillOrThrow(currentUser, request.tuitionBillId());
-        BigDecimal rate = resolveWithdrawalRefundRate(tuitionBill, request.withdrawalId());
+
+        BigDecimal rate;
+        try {
+            rate = resolveWithdrawalRefundRate(tuitionBill, request.withdrawalId());
+        } catch (AcademicResourceNotFoundException e) {
+            return applyPendingAcademicVerification(currentUser.id(), tuitionBill, request.withdrawalId());
+        }
+
         BigDecimal refundableBase = refundableBase(tuitionBill.getId());
         BigDecimal amount = refundableBase.multiply(rate);
 
@@ -90,10 +112,84 @@ public class RefundService {
         if (refund.getStatus() == RefundStatus.SUCCEEDED) {
             throw new RefundNotRetryableException("완료된 환불 금액과 환불률은 변경할 수 없습니다.");
         }
-        refund.updateRate(request.withdrawalId(), amount, rate);
+        if (refund.getStatus() == RefundStatus.PENDING_ACADEMIC_VERIFICATION || refund.getStatus() == RefundStatus.MANUAL_REVIEW_REQUIRED) {
+            refund.confirmAcademicVerification(request.withdrawalId(), amount, rate);
+        } else {
+            refund.updateRate(request.withdrawalId(), amount, rate);
+        }
         refund = refundRecorder.saveRateApplied(currentUser.id(), refund, tuitionBill.getId(), amount, rate);
 
         return RefundResponseDTO.from(refund);
+    }
+
+    // 이미 MANUAL_REVIEW_REQUIRED인 건은 재검증 성공 전까지 되돌리지 않고 409(E94)로 응답한다.
+    // 저장 자체가 실패(DB 접근 불가 등)하면 503+Retry-After로 응답한다(GlobalExceptionHandler가 헤더를 채운다).
+    private RefundResponseDTO applyPendingAcademicVerification(Long actorId, TuitionBill tuitionBill, Long withdrawalId) {
+        Refund refund = refundRepository.findByTuitionBillIdAndRefundType(tuitionBill.getId(), RefundType.WITHDRAWAL)
+                .orElseGet(() -> new Refund(tuitionBill.getId(), RefundType.WITHDRAWAL, BigDecimal.ZERO, BigDecimal.ZERO, RefundStatus.REQUESTED));
+        if (refund.getStatus() == RefundStatus.SUCCEEDED) {
+            throw new RefundNotRetryableException("완료된 환불 금액과 환불률은 변경할 수 없습니다.");
+        }
+        if (refund.getStatus() == RefundStatus.MANUAL_REVIEW_REQUIRED) {
+            throw new RefundManualReviewRequiredException("자퇴 신청 확인이 지연되어 수동 검토가 필요합니다. 관리자에게 문의하세요.");
+        }
+
+        refund.markPendingAcademicVerification(withdrawalId);
+        try {
+            refund = refundRecorder.savePendingAcademicVerification(actorId, refund, tuitionBill.getId());
+        } catch (RuntimeException e) {
+            log.error("PENDING_ACADEMIC_VERIFICATION 저장 실패 (tuitionBillId={})", tuitionBill.getId(), e);
+            throw new RefundVerificationPersistFailedException(
+                    "자퇴 환불률 보류 상태 저장에 실패했습니다. 잠시 후 다시 시도하세요.",
+                    PENDING_VERIFICATION_SAVE_RETRY_AFTER_SECONDS);
+        }
+
+        return RefundResponseDTO.from(refund);
+    }
+
+    // RefundVerificationRetryScheduler 전용 - PENDING_ACADEMIC_VERIFICATION 건 하나를 재검증한다.
+    // 성공하면 REQUESTED로 확정해 저장하고 true, 아직도 반영되지 않았으면 저장 없이 false를 반환한다
+    // (유예 시간 초과 여부는 스케줄러가 requestedAt을 보고 판단한다).
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public boolean retryPendingAcademicVerification(Long refundId) {
+        Refund refund = refundRepository.findById(refundId)
+                .orElseThrow(() -> new RefundNotFoundException("환불을 찾을 수 없습니다: " + refundId));
+        if (refund.getStatus() != RefundStatus.PENDING_ACADEMIC_VERIFICATION) {
+            return true; // 이미 다른 경로(재요청 등)로 처리됨 - 스케줄러가 더 손댈 필요 없음
+        }
+
+        TuitionBill tuitionBill = tuitionBillService.getTuitionBillOrThrow(refund.getTuitionBillId());
+        BigDecimal rate;
+        try {
+            rate = resolveWithdrawalRefundRate(tuitionBill, refund.getWithdrawalId());
+        } catch (AcademicResourceNotFoundException e) {
+            return false;
+        }
+
+        BigDecimal refundableBase = refundableBase(tuitionBill.getId());
+        BigDecimal amount = refundableBase.multiply(rate);
+        refund.confirmAcademicVerification(refund.getWithdrawalId(), amount, rate);
+        refundRecorder.saveRateApplied(SYSTEM_ACTOR_ID, refund, tuitionBill.getId(), amount, rate);
+        return true;
+    }
+
+    // RefundVerificationRetryScheduler 전용 - 재검증 유예 시간을 넘긴 PENDING_ACADEMIC_VERIFICATION 건을
+    // MANUAL_REVIEW_REQUIRED로 전환한다.
+    @Transactional
+    public void escalateToManualReview(Long refundId) {
+        Refund refund = refundRepository.findById(refundId)
+                .orElseThrow(() -> new RefundNotFoundException("환불을 찾을 수 없습니다: " + refundId));
+        if (refund.getStatus() != RefundStatus.PENDING_ACADEMIC_VERIFICATION) {
+            return;
+        }
+        refund.requireManualReview();
+        refundRecorder.saveManualReviewRequired(SYSTEM_ACTOR_ID, refund,
+                "Academic 자퇴 신청 스냅샷 재검증이 유예 시간 내 완료되지 않았습니다.");
+    }
+
+    // 재검증 대상 목록 - RefundVerificationRetryScheduler가 폴링에 사용한다.
+    public List<Refund> findPendingAcademicVerifications() {
+        return refundRepository.findByStatus(RefundStatus.PENDING_ACADEMIC_VERIFICATION);
     }
 
     // 성공 결제 합계에서 성공 환불 합계를 뺀 값만 환불 대상이다. 장학금은 결제 자체가
