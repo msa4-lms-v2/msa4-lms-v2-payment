@@ -55,6 +55,12 @@ public class Refund {
 
     private Integer retryCount = 0;
 
+    private String refundBankCode;
+
+    private String refundAccountNumber;
+
+    private String refundHolderName;
+
     public Refund(Long tuitionBillId, RefundType refundType, BigDecimal amount, BigDecimal refundRate, RefundStatus status) {
         this.tuitionBillId = tuitionBillId;
         this.refundType = refundType;
@@ -76,9 +82,20 @@ public class Refund {
         this.virtualAccountId = virtualAccountId;
     }
 
-    // 입금 검증 인프라가 갖춰져 이 메서드를 호출하게 되면, 호출 지점에서
-    // TuitionBillService의 납부상태 재계산도 함께 호출해야 한다 - 환불 완료가 tuition_bills.status에 반영되지 않으면
-    // 이미 환불된 고지가 계속 PAID로 남는다.
+    public void linkPayment(Long paymentId) {
+        this.paymentId = paymentId;
+    }
+
+    // 가상계좌 환불(WITHDRAWAL/EXCESS_DEPOSIT) 실행 시 토스 cancel API의 refundReceiveAccount로 보낼 수취 계좌.
+    // PG_CANCEL(카드)은 필요 없다.
+    public void linkRefundReceiveAccount(String bankCode, String accountNumber, String holderName) {
+        this.refundBankCode = bankCode;
+        this.refundAccountNumber = accountNumber;
+        this.refundHolderName = holderName;
+    }
+
+    // TuitionBillService/PaymentService의 납부상태 재계산은 호출부(RefundExecutionService)가 이어서 부른다 -
+    // 그러지 않으면 환불 완료가 tuition_bills.status에 반영되지 않아 이미 환불된 고지가 계속 PAID로 남는다.
     public void succeed() {
         this.status = RefundStatus.SUCCEEDED;
         this.completedAt = LocalDateTime.now();

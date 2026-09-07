@@ -1,5 +1,7 @@
 package com.msa4lmsv2payment.domain.virtualaccount.service;
 
+import com.msa4lmsv2payment.domain.installment.entity.InstallmentPlanItem;
+import com.msa4lmsv2payment.domain.installment.service.InstallmentPlanService;
 import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBill;
 import com.msa4lmsv2payment.domain.tuitionbill.service.TuitionBillService;
 import com.msa4lmsv2payment.domain.virtualaccount.entity.VirtualAccount;
@@ -16,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -29,6 +32,7 @@ public class VirtualAccountService {
 
     private final VirtualAccountRepository virtualAccountRepository;
     private final TuitionBillService tuitionBillService;
+    private final InstallmentPlanService installmentPlanService;
     private final TossPaymentsClient tossPaymentsClient;
     private final VirtualAccountRecorderService virtualAccountRecorder;
 
@@ -39,9 +43,19 @@ public class VirtualAccountService {
     public VirtualAccountResponseDTO issueVirtualAccount(CurrentUser currentUser, VirtualAccountIssueRequestDTO request) {
         TuitionBill tuitionBill = tuitionBillService.getOwnedTuitionBillOrThrow(currentUser, request.tuitionBillId());
 
+        BigDecimal amount;
+        Long installmentPlanItemId = request.installmentPlanItemId();
+        if (installmentPlanItemId != null) {
+            // 분할납부 회차 결제 - 회차 금액은 클라이언트가 지정할 수 없고 서버가 계획에 저장된 금액을 그대로 쓴다(위조 방지, 체크아웃 세션 연동과 동일 원칙).
+            InstallmentPlanItem item = installmentPlanService.getItemOrThrow(tuitionBill.getId(), installmentPlanItemId);
+            amount = item.getAmount();
+        } else {
+            amount = tuitionBill.getBillingAmount();
+        }
+
         String orderId = "TB-" + tuitionBill.getId() + "-" + UUID.randomUUID().toString().substring(0, 8);
         TossVirtualAccountIssueResponse tossResponse = tossPaymentsClient.issueVirtualAccount(
-                orderId, "등록금 납부", tuitionBill.getBillingAmount(), request.customerName(), request.bankCode());
+                orderId, "등록금 납부", amount, request.customerName(), request.bankCode());
 
         VirtualAccount virtualAccount = new VirtualAccount(
                 tuitionBill.getId(),
@@ -50,8 +64,10 @@ public class VirtualAccountService {
                 tossResponse.virtualAccount().accountNumber(),
                 tossResponse.virtualAccount().bankCode(),
                 LocalDateTime.now().plusHours(DEFAULT_VALID_HOURS),
-                VirtualAccountStatus.ISSUED
+                VirtualAccountStatus.ISSUED,
+                installmentPlanItemId
         );
+        virtualAccount.assignPaymentKey(tossResponse.paymentKey());
 
         return VirtualAccountResponseDTO.from(virtualAccountRecorder.saveWithAudit(currentUser.id(), virtualAccount));
     }
@@ -62,5 +78,14 @@ public class VirtualAccountService {
     public VirtualAccount getByTuitionBillIdOrThrow(Long tuitionBillId) {
         return virtualAccountRepository.findByTuitionBillId(tuitionBillId)
                 .orElseThrow(() -> new VirtualAccountNotFoundException("해당 등록금 고지에 발급된 가상계좌가 없습니다."));
+    }
+
+    /**
+     * 환불 실행(RefundService)이 refund.virtualAccountId로 특정 가상계좌를 직접 찾아야 할 때 이 공개 메서드를 거친다.
+     * 분할납부 회차별 가상계좌(4주차)가 생기면서 고지 1건에 계좌가 여러 개일 수 있어 findByTuitionBillId만으로는 부족하다.
+     */
+    public VirtualAccount getByIdOrThrow(Long virtualAccountId) {
+        return virtualAccountRepository.findById(virtualAccountId)
+                .orElseThrow(() -> new VirtualAccountNotFoundException("가상계좌를 찾을 수 없습니다: " + virtualAccountId));
     }
 }
