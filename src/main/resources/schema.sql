@@ -72,6 +72,19 @@ PREPARE virtual_accounts_secret_stmt FROM @virtual_accounts_secret_ddl;
 EXECUTE virtual_accounts_secret_stmt;
 DEALLOCATE PREPARE virtual_accounts_secret_stmt;
 
+-- 4주차: 분할납부 회차별 가상계좌 연결 - payments.installment_plan_item_id와 같은 이유로 회차 결제일 때만 채워진다.
+-- FK는 installment_plan_items 테이블이 생긴 뒤(분할납부 섹션)에 추가한다.
+SET @virtual_accounts_installment_plan_item_id_exists = (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'virtual_accounts' AND COLUMN_NAME = 'installment_plan_item_id'
+);
+SET @virtual_accounts_installment_plan_item_id_ddl = IF(@virtual_accounts_installment_plan_item_id_exists = 0,
+    'ALTER TABLE virtual_accounts ADD COLUMN installment_plan_item_id BIGINT COMMENT ''분할납부 회차 결제일 때만 채워짐, installment_plan_items.id 참조''',
+    'SELECT 1');
+PREPARE virtual_accounts_installment_plan_item_id_stmt FROM @virtual_accounts_installment_plan_item_id_ddl;
+EXECUTE virtual_accounts_installment_plan_item_id_stmt;
+DEALLOCATE PREPARE virtual_accounts_installment_plan_item_id_stmt;
+
 CREATE TABLE IF NOT EXISTS virtual_account_deposits (
     id                  BIGINT AUTO_INCREMENT PRIMARY KEY,
     virtual_account_id  BIGINT NOT NULL,
@@ -272,6 +285,18 @@ SET @fk_payments_installment_plan_item_ddl = IF(@fk_payments_installment_plan_it
 PREPARE fk_payments_installment_plan_item_stmt FROM @fk_payments_installment_plan_item_ddl;
 EXECUTE fk_payments_installment_plan_item_stmt;
 DEALLOCATE PREPARE fk_payments_installment_plan_item_stmt;
+
+-- virtual_accounts.installment_plan_item_id 컬럼은 위(가상계좌 섹션)에서 이미 추가했다. FK만 여기서 건다.
+SET @fk_virtual_accounts_installment_plan_item_exists = (
+    SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'virtual_accounts' AND CONSTRAINT_NAME = 'fk_virtual_accounts_installment_plan_item'
+);
+SET @fk_virtual_accounts_installment_plan_item_ddl = IF(@fk_virtual_accounts_installment_plan_item_exists = 0,
+    'ALTER TABLE virtual_accounts ADD CONSTRAINT fk_virtual_accounts_installment_plan_item FOREIGN KEY (installment_plan_item_id) REFERENCES installment_plan_items (id)',
+    'SELECT 1');
+PREPARE fk_virtual_accounts_installment_plan_item_stmt FROM @fk_virtual_accounts_installment_plan_item_ddl;
+EXECUTE fk_virtual_accounts_installment_plan_item_stmt;
+DEALLOCATE PREPARE fk_virtual_accounts_installment_plan_item_stmt;
 
 -- 2026-08-15: 장학금 신청(student-initiated) - 기존 scholarships/scholarship-discounts는 관리자가 배분을 확정하는 API만 있어,
 -- 학생이 직접 신청을 접수하는 절차와 그 승인 이력을 별도로 남긴다. 승인되면 이 신청을 근거로 scholarships 행이 생성된다.
