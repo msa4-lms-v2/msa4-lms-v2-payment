@@ -1,7 +1,7 @@
 package com.msa4lmsv2payment.global.client;
 
 /**
- * Payment가 Academic에 요청하는 조회 계약. 구현체는 AcademicHttpClient(실제 호출) 하나다.
+ * Payment가 Academic에 요청하는 조회 계약. 구현체는 AcademicSnapshotClient(Kafka로 채운 로컬 스냅샷 조회) 하나다.
  */
 public interface AcademicClient {
 

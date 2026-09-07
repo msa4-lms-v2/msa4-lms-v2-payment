@@ -1,5 +1,7 @@
 package com.msa4lmsv2payment.domain.refund.controller;
 
+import com.msa4lmsv2payment.domain.refund.request.PgCancelRefundRequestDTO;
+import com.msa4lmsv2payment.domain.refund.request.RefundExecuteRequestDTO;
 import com.msa4lmsv2payment.domain.refund.request.RefundRetryRequestDTO;
 import com.msa4lmsv2payment.domain.refund.request.VirtualAccountRefundRequestDTO;
 import com.msa4lmsv2payment.domain.refund.request.WithdrawalRefundRateRequestDTO;
@@ -25,6 +27,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -32,6 +35,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.Optional;
 
 @Tag(name = "Refund", description = "자퇴 환불·가상계좌 환불·재시도")
@@ -41,6 +45,8 @@ public class RefundController {
 
     private static final String ENDPOINT_VIRTUAL_ACCOUNT_REQUESTS = "/api/payment/refunds/virtual-account-requests";
     private static final String ENDPOINT_RETRY = "/api/payment/refunds/retry";
+    private static final String ENDPOINT_PG_CANCEL_REQUESTS = "/api/payment/refunds/pg-cancel-requests";
+    private static final String ENDPOINT_EXECUTE = "/api/payment/refunds/{refundId}/execute";
 
     private final RefundService refundService;
     private final IdempotencyService idempotencyService;
@@ -122,6 +128,62 @@ public class RefundController {
             return GlobalResponseDTO.success(replay.orElseThrow());
         }
         RefundResponseDTO response = refundService.retryFailedRefund(currentUser, request);
+        idempotencyService.markCompleted(idempotencyKey, response);
+        return GlobalResponseDTO.success(response);
+    }
+
+    @Operation(summary = "환불 이력 조회", description = "등록금 고지 1건의 환불 요청 이력을 최신순으로 조회한다(자퇴·가상계좌 초과입금·카드취소 전체). STUDENT 본인 / ADMIN 관리 범위.")
+    @ApiResponse(responseCode = "200", description = "조회 성공")
+    @CustomApiResponse({CustomResponseCode.ACCESS_DENIED, CustomResponseCode.NOT_FOUND_DATA})
+    @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
+    @GetMapping("/api/payment/refunds")
+    public GlobalResponseDTO<List<RefundResponseDTO>> listRefunds(
+            @AuthenticationPrincipal CurrentUser currentUser,
+            @RequestParam Long tuitionBillId
+    ) {
+        return GlobalResponseDTO.success(refundService.listRefunds(currentUser, tuitionBillId));
+    }
+
+    @Operation(summary = "카드 결제 취소 요청", description = """
+            성공한 카드 결제를 취소 대상으로 등록한다. amount를 비우면 이미 취소된 금액을 뺀 전액, 지정하면 그만큼만(부분취소) REQUESTED로 저장한다.
+            같은 결제에 재요청하면 새로 만들지 않고 기존 REQUESTED 건의 금액만 갱신한다. 실제 토스 취소 호출은 이 요청이 아니라 /execute에서 한다. ADMIN 전용.
+            """)
+    @ApiResponse(responseCode = "201", description = "생성 성공")
+    @CustomApiResponse({CustomResponseCode.INVALID_PARAMETER, CustomResponseCode.ACCESS_DENIED, CustomResponseCode.NOT_FOUND_DATA})
+    @PreAuthorize("hasRole('ADMIN')")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PostMapping(ENDPOINT_PG_CANCEL_REQUESTS)
+    public GlobalResponseDTO<RefundResponseDTO> createPgCancelRefund(
+            @AuthenticationPrincipal CurrentUser admin,
+            @RequestBody @Valid PgCancelRefundRequestDTO request
+    ) {
+        return GlobalResponseDTO.success(refundService.createPgCancelRefund(admin, request));
+    }
+
+    @Operation(summary = "환불 실행", description = """
+            REQUESTED/RETRYING 상태의 환불을 실제 토스 취소 API로 실행한다. FAILED 상태는 재시도 횟수(3회) 안에서 자동으로 RETRYING 전환 후 실행한다.
+            WITHDRAWAL/EXCESS_DEPOSIT(가상계좌 환불)는 refundBankCode/refundAccountNumber/refundHolderName이 필수다. PG_CANCEL(카드)은 비운다. ADMIN 전용.
+            """)
+    @ApiResponse(responseCode = "200", description = "실행 완료(SUCCEEDED 또는 FAILED) 또는 완료된 동일 멱등 요청의 저장 응답 재생")
+    @CustomApiResponse({CustomResponseCode.INVALID_PARAMETER, CustomResponseCode.ACCESS_DENIED,
+            CustomResponseCode.NOT_FOUND_DATA, CustomResponseCode.DUPLICATE_DATA, CustomResponseCode.DEPENDENCY_UNAVAILABLE})
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping(ENDPOINT_EXECUTE)
+    public GlobalResponseDTO<RefundResponseDTO> executeRefund(
+            @AuthenticationPrincipal CurrentUser admin,
+            @PathVariable Long refundId,
+            @Parameter(description = """
+                    1~100자의 중복 요청 방지 키. 이 값을 토스 취소 호출의 Idempotency-Key로도 그대로 사용해 같은 취소가 중복 처리되지 않게 한다.
+                    """, required = true, schema = @Schema(minLength = 1, maxLength = 100, example = "refund-execute-20260907-0001"))
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @RequestBody @Valid RefundExecuteRequestDTO request
+    ) {
+        Optional<RefundResponseDTO> replay = idempotencyService.verifyAndReserve(
+                idempotencyKey, admin.id(), ENDPOINT_EXECUTE, request, RefundResponseDTO.class);
+        if (replay.isPresent()) {
+            return GlobalResponseDTO.success(replay.orElseThrow());
+        }
+        RefundResponseDTO response = refundService.executeRefund(admin, refundId, request, idempotencyKey);
         idempotencyService.markCompleted(idempotencyKey, response);
         return GlobalResponseDTO.success(response);
     }

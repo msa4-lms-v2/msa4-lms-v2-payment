@@ -1,6 +1,7 @@
 package com.msa4lmsv2payment.domain.virtualaccount.service;
 
 import com.msa4lmsv2payment.domain.virtualaccount.entity.VirtualAccount;
+import com.msa4lmsv2payment.domain.virtualaccount.entity.VirtualAccountStatus;
 import com.msa4lmsv2payment.domain.virtualaccount.repository.VirtualAccountDepositRepository;
 import com.msa4lmsv2payment.domain.virtualaccount.repository.VirtualAccountRepository;
 import com.msa4lmsv2payment.domain.virtualaccount.request.TossVirtualAccountDepositWebhookRequest;
@@ -101,5 +102,15 @@ public class VirtualAccountDepositService {
         } catch (DateTimeException | NumberFormatException e) {
             throw new VirtualAccountSecretMismatchException("Webhook timestamp 형식이 올바르지 않습니다.");
         }
+        BigDecimal amount = BigDecimal.valueOf(tossPayment.totalAmount());
+        if (virtualAccount.getStatus() == VirtualAccountStatus.EXPIRED) {
+            // 만료된 계좌로 실제 돈이 들어온 것이므로 입금 기록은 남기되, 정상 완납 흐름(고지 상태 변경) 대신
+            // 전액 환불 요청을 자동 생성한다 - 사용자 확인(2026-09-07) 반영.
+            log.warn("만료된 가상계좌로 입금됨, 전액 환불 요청 생성 [orderId={}, virtualAccountId={}]", webhook.orderId(), virtualAccount.getId());
+            depositRecorder.recordExpiredAccountDeposit(virtualAccount.getId(), amount, webhook.transactionKey());
+            return;
+        }
+
+        depositRecorder.recordDeposit(virtualAccount.getId(), amount, webhook.transactionKey());
     }
 }

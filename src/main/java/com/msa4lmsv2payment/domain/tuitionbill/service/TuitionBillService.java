@@ -114,6 +114,14 @@ public class TuitionBillService {
     }
 
     /**
+     * Academic이 학생·학기별 납부 상태를 조회할 때(SCRUM-176) 이 메서드를 거친다 - 시스템 호출이라 소유권 검증이 없다.
+     */
+    public TuitionBill getByStudentAndSemesterOrThrow(Long studentId, Long semesterId) {
+        return tuitionBillRepository.findByStudentIdAndSemesterId(studentId, semesterId)
+                .orElseThrow(() -> new TuitionBillNotFoundException("해당 학생·학기의 등록금 고지를 찾을 수 없습니다."));
+    }
+
+    /**
      * 동시 장학금 적용처럼 합계 재계산 후 저장까지 직렬화해야 하는 흐름이 이 행을 잠근 채로 호출한다.
      * 호출부의 트랜잭션에 그대로 참여하므로(REQUIRED), 호출부가 이미 @Transactional이어야 락이 유지된다.
      */

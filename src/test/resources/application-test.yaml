@@ -1,0 +1,10 @@
+spring:
+  sql:
+    init:
+      mode: always
+  kafka:
+    bootstrap-servers: localhost:19999
+
+toss:
+  payments:
+    secret-key: test-secret-key
