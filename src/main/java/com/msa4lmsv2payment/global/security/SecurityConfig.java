@@ -3,6 +3,7 @@ package com.msa4lmsv2payment.global.security;
 import com.msa4lmsv2payment.global.security.filter.GatewayContextAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
+import org.springframework.http.HttpMethod;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -37,6 +38,8 @@ public class SecurityConfig {
                     auth.requestMatchers("/actuator/health", "/actuator/health/**").permitAll();
                     auth.requestMatchers(SWAGGER_PATHS).permitAll();
                     auth.requestMatchers("/api/payment/webhooks/**").permitAll();
+                    // 제3자가 로그인 없이 검증 토큰만으로 호출하는 공개 API(SCG public-paths와 동일하게 맞춘다).
+                    auth.requestMatchers(HttpMethod.GET, "/api/payment/certificates/verify").permitAll();
                     // Academic이 호출하는 서비스 간 시스템 요청 - X-User-Id/X-User-Role을 싣지 않으므로 인증 대상에서 제외한다.
                     // 실제 보호는 SCG Internal listener + NetworkPolicy가 담당한다(docs-v2/MSA-LMS_INTEGRATION.md "서비스 시스템 요청").
                     auth.requestMatchers("/api/payment/academic-provision/**").permitAll();

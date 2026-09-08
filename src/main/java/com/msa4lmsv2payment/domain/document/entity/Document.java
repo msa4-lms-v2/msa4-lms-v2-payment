@@ -8,6 +8,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import com.msa4lmsv2payment.global.error.DocumentAlreadyRevokedException;
 import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -56,5 +57,16 @@ public class Document {
         this.documentType = documentType;
         this.verificationToken = verificationToken;
         this.qrHash = qrHash;
+    }
+
+    public boolean isRevoked() {
+        return revokedAt != null;
+    }
+
+    public void revoke() {
+        if (isRevoked()) {
+            throw new DocumentAlreadyRevokedException("이미 폐기된 증명서입니다.");
+        }
+        this.revokedAt = LocalDateTime.now();
     }
 }
