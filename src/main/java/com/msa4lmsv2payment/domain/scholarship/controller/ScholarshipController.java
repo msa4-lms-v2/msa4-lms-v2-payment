@@ -1,5 +1,6 @@
 package com.msa4lmsv2payment.domain.scholarship.controller;
 
+import com.msa4lmsv2payment.domain.installment.service.InstallmentPlanService;
 import com.msa4lmsv2payment.domain.scholarship.request.PaymentScholarshipAllocationRequestDTO;
 import com.msa4lmsv2payment.domain.scholarship.request.ScholarshipDiscountRequestDTO;
 import com.msa4lmsv2payment.domain.scholarship.response.MyScholarshipResponseDTO;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Tag(name = "Payment", description = "장학금 감면·실납부액 계산")
@@ -32,8 +34,12 @@ import java.util.List;
 public class ScholarshipController {
 
     private final ScholarshipService scholarshipService;
+    private final InstallmentPlanService installmentPlanService;
 
-    @Operation(summary = "장학금 감면·면제 적용", description = "ADMIN이 등록금 고지에 장학금을 적용한다. 고지 금액을 초과하는 감면은 거부된다.")
+    @Operation(summary = "장학금 감면·면제 적용", description = """
+            ADMIN이 등록금 고지에 장학금을 적용한다. 고지 금액을 초과하는 감면은 거부된다.
+            해당 고지에 승인된(ACTIVE) 분할납부 계획이 있으면 아직 납부하지 않은 회차 금액을 새 실납부액 기준으로 다시 나눈다.
+            """)
     @ApiResponse(responseCode = "201", description = "적용 성공")
     @CustomApiResponse({CustomResponseCode.ACCESS_DENIED, CustomResponseCode.NOT_FOUND_DATA, CustomResponseCode.INVALID_PARAMETER})
     @PreAuthorize("hasRole('ADMIN')")
@@ -43,7 +49,16 @@ public class ScholarshipController {
             @AuthenticationPrincipal CurrentUser currentUser,
             @RequestBody @Valid ScholarshipDiscountRequestDTO request
     ) {
-        return GlobalResponseDTO.success(scholarshipService.applyScholarshipDiscount(currentUser, request));
+        ScholarshipResponseDTO response = scholarshipService.applyScholarshipDiscount(currentUser, request);
+
+        // 장학금 적용과 분할납부 회차 재계산은 서로 다른 도메인 서비스의 별도 트랜잭션이다(ScholarshipService가
+        // InstallmentPlanService를 직접 의존하면 순환 의존이 생겨 이렇게 나눴다). 재계산이 실패해도 장학금 적용
+        // 자체는 이미 확정된 상태로 남는다 - 재계산은 부가적인 정합성 보정이라 핵심 트랜잭션과 묶지 않았다.
+        BigDecimal newActualPaymentAmount = scholarshipService.calculateAllocation(
+                currentUser, new PaymentScholarshipAllocationRequestDTO(request.tuitionBillId())).actualPaymentAmount();
+        installmentPlanService.recalculateForScholarshipChange(currentUser.id(), request.tuitionBillId(), newActualPaymentAmount);
+
+        return GlobalResponseDTO.success(response);
     }
 
     @Operation(summary = "실제 납부액과 장학금 구분", description = "고지 금액에서 적용된 장학금 합계를 뺀 실납부액을 계산한다. STUDENT 본인 / ADMIN 관리 범위.")

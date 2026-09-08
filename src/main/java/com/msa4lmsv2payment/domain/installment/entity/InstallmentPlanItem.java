@@ -63,6 +63,14 @@ public class InstallmentPlanItem {
         this.status = InstallmentItemStatus.PAID;
     }
 
+    // 장학금 변경으로 실납부액이 바뀌었을 때 미납 회차 금액을 다시 나눈 값으로 갱신한다. 이미 납부된 회차는 소급해 바꾸지 않는다.
+    public void updateAmount(BigDecimal newAmount) {
+        if (status == InstallmentItemStatus.PAID) {
+            throw new InstallmentItemAlreadyPaidException("이미 납부 완료된 회차입니다.");
+        }
+        this.amount = newAmount;
+    }
+
     // 기한이 지나도록 미납인 회차만 대상이다(스케줄러가 SCHEDULED만 조회해서 부르므로 여기서는 무조건 전환).
     public void markOverdue() {
         this.status = InstallmentItemStatus.OVERDUE;

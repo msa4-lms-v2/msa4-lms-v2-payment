@@ -70,16 +70,24 @@ public class OpenApiConfig {
         return (operation, handlerMethod) -> addGatewayErrorResponses(operation);
     }
 
+    // 메서드에 @SecurityRequirements(value = {})를 붙이면 springdoc이 operation.security를 빈 리스트로 설정해
+    // OpenAPI 전역 기본 보안요건(gatewayContext)을 이 오퍼레이션에서 제외한다. 그렇게 명시적으로 공개 API로 표시된
+    // 오퍼레이션에는 Gateway 인증(401)·권한(403) 에러 예시를 붙이지 않는다 - 실제로 X-User-Id/Role 없이 호출되기 때문이다.
+    // 500 시스템 오류는 인증 여부와 무관하게 발생할 수 있어 모든 오퍼레이션에 그대로 남긴다.
     private Operation addGatewayErrorResponses(Operation operation) {
+        boolean isPublic = operation.getSecurity() != null && operation.getSecurity().isEmpty();
+
         ApiResponses responses = operation.getResponses();
         if (responses == null) {
             responses = new ApiResponses();
             operation.setResponses(responses);
         }
-        responses.putIfAbsent("401", new ApiResponse()
-                .$ref("#/components/responses/" + AUTHENTICATION_REQUIRED_RESPONSE));
-        responses.putIfAbsent("403", new ApiResponse()
-                .$ref("#/components/responses/" + ACCESS_DENIED_RESPONSE));
+        if (!isPublic) {
+            responses.putIfAbsent("401", new ApiResponse()
+                    .$ref("#/components/responses/" + AUTHENTICATION_REQUIRED_RESPONSE));
+            responses.putIfAbsent("403", new ApiResponse()
+                    .$ref("#/components/responses/" + ACCESS_DENIED_RESPONSE));
+        }
         responses.putIfAbsent("500", new ApiResponse()
                 .$ref("#/components/responses/" + SYSTEM_ERROR_RESPONSE));
         return operation;
