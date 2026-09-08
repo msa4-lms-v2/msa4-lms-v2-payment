@@ -160,4 +160,13 @@ public class PaymentController {
     ) {
         return GlobalResponseDTO.success(paymentService.getMyPaymentHistory(currentUser, status));
     }
+
+    @Operation(summary = "등록금 고지 결제 내역 조회", description = "특정 등록금 고지의 결제 시도 이력을 조회한다. PG 전체·부분취소 대상 결제를 선택할 때 사용한다. ADMIN 전용.")
+    @ApiResponse(responseCode = "200", description = "조회 성공")
+    @CustomApiResponse({CustomResponseCode.ACCESS_DENIED, CustomResponseCode.NOT_FOUND_DATA})
+    @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping("/api/payment/tuition-bills/{tuitionBillId}/payments")
+    public GlobalResponseDTO<List<PaymentResponseDTO>> listPaymentsForBill(@PathVariable Long tuitionBillId) {
+        return GlobalResponseDTO.success(paymentService.listPaymentsForBill(tuitionBillId));
+    }
 }
