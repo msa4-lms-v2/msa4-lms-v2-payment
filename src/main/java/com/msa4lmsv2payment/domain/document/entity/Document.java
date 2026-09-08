@@ -1,5 +1,6 @@
 package com.msa4lmsv2payment.domain.document.entity;
 
+import com.msa4lmsv2payment.global.error.DocumentAlreadyRevokedException;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
 import jakarta.persistence.EnumType;
@@ -56,5 +57,16 @@ public class Document {
         this.documentType = documentType;
         this.verificationToken = verificationToken;
         this.qrHash = qrHash;
+    }
+
+    public boolean isRevoked() {
+        return revokedAt != null;
+    }
+
+    public void revoke() {
+        if (isRevoked()) {
+            throw new DocumentAlreadyRevokedException("이미 폐기된 증명서입니다.");
+        }
+        this.revokedAt = LocalDateTime.now();
     }
 }

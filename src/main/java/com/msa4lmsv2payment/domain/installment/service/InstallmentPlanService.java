@@ -155,18 +155,65 @@ public class InstallmentPlanService {
         }
     }
 
+    /**
+     * 승인된(ACTIVE) 분할납부 계획이 있는 고지에 장학금이 변경되면, 아직 납부하지 않은 회차(SCHEDULED, OVERDUE) 금액을
+     * 새 실납부액 기준으로 다시 나눈다. 이미 낸(PAID) 회차는 소급해 바꾸지 않고, 계획이 없거나 ACTIVE가 아니면 아무 것도 하지 않는다.
+     * 호출부(장학금 변경 트랜잭션)와 별도 트랜잭션으로 실행될 수 있다 - ScholarshipService에 대한 역방향 의존을 피하기 위해
+     * 이 메서드는 장학금 도메인 서비스를 직접 부르지 않고, 호출부가 이미 계산한 실납부액을 그대로 받는다.
+     */
+    @Transactional
+    public void recalculateForScholarshipChange(Long actorId, Long tuitionBillId, BigDecimal newActualPaymentAmount) {
+        InstallmentPlan plan = installmentPlanRepository.findByTuitionBillId(tuitionBillId).orElse(null);
+        if (plan == null || plan.getStatus() != InstallmentPlanStatus.ACTIVE) {
+            return;
+        }
+
+        List<InstallmentPlanItem> items = installmentPlanItemRepository.findByInstallmentPlanIdOrderByRoundNo(plan.getId());
+        List<InstallmentPlanItem> unpaidItems = items.stream()
+                .filter(item -> item.getStatus() != InstallmentItemStatus.PAID)
+                .toList();
+        if (unpaidItems.isEmpty()) {
+            return;
+        }
+
+        BigDecimal paidTotal = items.stream()
+                .filter(item -> item.getStatus() == InstallmentItemStatus.PAID)
+                .map(InstallmentPlanItem::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal remainingAmount = newActualPaymentAmount.subtract(paidTotal).max(BigDecimal.ZERO);
+
+        List<BigDecimal> newAmounts = splitAmount(remainingAmount, unpaidItems.size());
+        for (int i = 0; i < unpaidItems.size(); i++) {
+            unpaidItems.get(i).updateAmount(newAmounts.get(i));
+        }
+
+        auditLogRecorder.record(actorId, AuditAction.INSTALLMENT_PLAN_RECALCULATED, "INSTALLMENT_PLAN", plan.getId(),
+                Map.of("tuitionBillId", tuitionBillId, "remainingAmount", remainingAmount, "recalculatedRounds", unpaidItems.size()), null);
+    }
+
     private List<InstallmentPlanItemDraft> buildItems(BigDecimal totalAmount, int totalRounds, LocalDate firstDueDate) {
-        BigDecimal baseRoundAmount = totalAmount.divide(BigDecimal.valueOf(totalRounds), 0, RoundingMode.DOWN);
-        BigDecimal allocatedSoFar = BigDecimal.ZERO;
+        List<BigDecimal> amounts = splitAmount(totalAmount, totalRounds);
 
         List<InstallmentPlanItemDraft> drafts = new ArrayList<>();
         for (int round = 1; round <= totalRounds; round++) {
-            boolean isLastRound = round == totalRounds;
-            BigDecimal amount = isLastRound ? totalAmount.subtract(allocatedSoFar) : baseRoundAmount;
-            allocatedSoFar = allocatedSoFar.add(amount);
-            drafts.add(new InstallmentPlanItemDraft(round, amount, firstDueDate.plusMonths(round - 1)));
+            drafts.add(new InstallmentPlanItemDraft(round, amounts.get(round - 1), firstDueDate.plusMonths(round - 1)));
         }
         return drafts;
+    }
+
+    // 총액을 count개로 나눠 마지막 몫이 나머지를 흡수하게 한다(1원 단위 절사 오차가 마지막 회차에만 몰림).
+    private List<BigDecimal> splitAmount(BigDecimal totalAmount, int count) {
+        BigDecimal baseAmount = totalAmount.divide(BigDecimal.valueOf(count), 0, RoundingMode.DOWN);
+        BigDecimal allocatedSoFar = BigDecimal.ZERO;
+
+        List<BigDecimal> amounts = new ArrayList<>();
+        for (int i = 1; i <= count; i++) {
+            boolean isLast = i == count;
+            BigDecimal amount = isLast ? totalAmount.subtract(allocatedSoFar) : baseAmount;
+            allocatedSoFar = allocatedSoFar.add(amount);
+            amounts.add(amount);
+        }
+        return amounts;
     }
 
     private InstallmentPlanResponseDTO toResponse(InstallmentPlan plan) {

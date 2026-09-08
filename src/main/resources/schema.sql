@@ -462,3 +462,14 @@ SET @refunds_status_widen_ddl = IF(@refunds_status_length < 32,
 PREPARE refunds_status_widen_stmt FROM @refunds_status_widen_ddl;
 EXECUTE refunds_status_widen_stmt;
 DEALLOCATE PREPARE refunds_status_widen_stmt;
+
+-- 2026-09-08: 증명서 진위확인(공개 API) 조회 이력. documents 1건에 여러 번 조회될 수 있어 1:N.
+CREATE TABLE IF NOT EXISTS document_verifications (
+    id           BIGINT AUTO_INCREMENT PRIMARY KEY,
+    document_id  BIGINT NOT NULL,
+    verified_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    verifier_ip  VARCHAR(45) COMMENT 'IPv6 최대 길이, nullable',
+    result       VARCHAR(20) NOT NULL COMMENT 'VALID, REVOKED, EXPIRED',
+    INDEX idx_document_verifications_document_id (document_id),
+    CONSTRAINT fk_document_verifications_document FOREIGN KEY (document_id) REFERENCES documents (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

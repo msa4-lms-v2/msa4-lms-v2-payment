@@ -11,6 +11,7 @@ import com.msa4lmsv2payment.global.response.GlobalResponseDTO;
 import com.msa4lmsv2payment.global.security.CurrentUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -47,6 +48,7 @@ public class VirtualAccountController {
     @Operation(summary = "가상계좌 입금 Webhook", description = "토스페이먼츠가 가상계좌 입금 발생 시 호출한다. 로그인 사용자 없는 시스템 요청 - secret으로 인증한다.")
     @ApiResponse(responseCode = "200", description = "처리 완료(신규 반영 또는 이미 처리된 건이라 무시)")
     @CustomApiResponse({CustomResponseCode.ACCESS_DENIED, CustomResponseCode.NOT_FOUND_DATA})
+    @SecurityRequirements
     @PostMapping({"/api/payment/webhooks/toss", "/api/payment/webhooks/toss/virtual-account-deposits"})
     public GlobalResponseDTO<Void> receiveVirtualAccountDeposit(
             @RequestHeader("tosspayments-webhook-transmission-id") String transmissionId,
