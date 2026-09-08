@@ -2,6 +2,9 @@ package com.msa4lmsv2payment.domain.installment;
 
 import com.msa4lmsv2payment.domain.installment.entity.InstallmentPlan;
 import com.msa4lmsv2payment.domain.installment.repository.InstallmentPlanRepository;
+import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBill;
+import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBillStatus;
+import com.msa4lmsv2payment.domain.tuitionbill.repository.TuitionBillRepository;
 import com.msa4lmsv2payment.global.security.filter.GatewayContextAuthenticationFilter;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,6 +17,9 @@ import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -38,6 +44,14 @@ class InstallmentPlanSecurityIntegrationTest {
     @Autowired
     private InstallmentPlanRepository installmentPlanRepository;
 
+    @Autowired
+    private TuitionBillRepository tuitionBillRepository;
+
+    private Long saveTuitionBill() {
+        return tuitionBillRepository.save(new TuitionBill(90L, 1L, BigDecimal.valueOf(1_000_000),
+                LocalDate.now().plusDays(30), TuitionBillStatus.UNPAID, 1L)).getId();
+    }
+
     @Test
     void 인증_헤더가_없으면_401이다() throws Exception {
         mockMvc.perform(patch("/api/payment/installment-plans/1/review")
@@ -50,7 +64,7 @@ class InstallmentPlanSecurityIntegrationTest {
 
     @Test
     void STUDENT는_심사할_수_없다() throws Exception {
-        InstallmentPlan plan = installmentPlanRepository.save(new InstallmentPlan(70L, 2));
+        InstallmentPlan plan = installmentPlanRepository.save(new InstallmentPlan(saveTuitionBill(), 2));
 
         mockMvc.perform(patch("/api/payment/installment-plans/" + plan.getId() + "/review")
                         .header(GatewayContextAuthenticationFilter.USER_ID_HEADER, "1")
@@ -64,7 +78,7 @@ class InstallmentPlanSecurityIntegrationTest {
 
     @Test
     void ADMIN은_심사할_수_있다() throws Exception {
-        InstallmentPlan plan = installmentPlanRepository.save(new InstallmentPlan(71L, 2));
+        InstallmentPlan plan = installmentPlanRepository.save(new InstallmentPlan(saveTuitionBill(), 2));
 
         mockMvc.perform(patch("/api/payment/installment-plans/" + plan.getId() + "/review")
                         .header(GatewayContextAuthenticationFilter.USER_ID_HEADER, "2")
