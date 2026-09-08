@@ -167,7 +167,7 @@ class RefundExecutionIntegrationTest {
     }
 
     @Test
-    void 카드결제_부분취소는_지정한_금액만_취소하고_전액취소와_구분된다() {
+    void pgCancelRefundPartialAmountCancelsOnlySpecifiedAmount() {
         TuitionBill bill = tuitionBillRepository.save(
                 new TuitionBill(54L, 1L, BigDecimal.valueOf(1_000_000), LocalDate.now().plusDays(30), TuitionBillStatus.UNPAID, 1L));
         Payment payment = new Payment(bill.getId(), bill.getStudentId(), BigDecimal.valueOf(1_000_000), PaymentMethod.CARD, PaymentStatus.REQUESTED);
@@ -191,7 +191,7 @@ class RefundExecutionIntegrationTest {
     }
 
     @Test
-    void 같은_결제에_취소를_재요청하면_새로_만들지_않고_기존_REQUESTED_건의_금액만_갱신한다() {
+    void repeatedPgCancelRequestOnSamePaymentUpdatesExistingRequestedRefundInstead() {
         TuitionBill bill = tuitionBillRepository.save(
                 new TuitionBill(55L, 1L, BigDecimal.valueOf(1_000_000), LocalDate.now().plusDays(30), TuitionBillStatus.UNPAID, 1L));
         Payment payment = new Payment(bill.getId(), bill.getStudentId(), BigDecimal.valueOf(1_000_000), PaymentMethod.CARD, PaymentStatus.REQUESTED);

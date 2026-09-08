@@ -1,10 +1,10 @@
 package com.msa4lmsv2payment.domain.scholarshipapplication.service;
 
+import com.msa4lmsv2payment.domain.installment.service.InstallmentPlanService;
 import com.msa4lmsv2payment.domain.scholarship.request.PaymentScholarshipAllocationRequestDTO;
 import com.msa4lmsv2payment.domain.scholarship.request.ScholarshipDiscountRequestDTO;
 import com.msa4lmsv2payment.domain.scholarship.response.ScholarshipResponseDTO;
 import com.msa4lmsv2payment.domain.scholarship.service.ScholarshipService;
-import com.msa4lmsv2payment.domain.installment.service.InstallmentPlanService;
 import com.msa4lmsv2payment.domain.scholarshipapplication.entity.ScholarshipApplication;
 import com.msa4lmsv2payment.domain.scholarshipapplication.entity.ScholarshipApplicationPeriod;
 import com.msa4lmsv2payment.domain.scholarshipapplication.entity.ScholarshipApplicationStatus;
@@ -20,11 +20,11 @@ import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBill;
 import com.msa4lmsv2payment.domain.tuitionbill.service.TuitionBillService;
 import com.msa4lmsv2payment.global.audit.AuditAction;
 import com.msa4lmsv2payment.global.audit.AuditLogRecorder;
+import com.msa4lmsv2payment.global.error.RejectReasonRequiredException;
 import com.msa4lmsv2payment.global.error.ScholarshipApplicationAlreadyPendingException;
 import com.msa4lmsv2payment.global.error.ScholarshipApplicationNotFoundException;
 import com.msa4lmsv2payment.global.error.ScholarshipApplicationNotOpenException;
 import com.msa4lmsv2payment.global.error.ScholarshipApplicationPeriodNotFoundException;
-import com.msa4lmsv2payment.global.error.RejectReasonRequiredException;
 import com.msa4lmsv2payment.global.security.CurrentUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

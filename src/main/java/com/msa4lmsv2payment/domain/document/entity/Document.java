@@ -1,5 +1,6 @@
 package com.msa4lmsv2payment.domain.document.entity;
 
+import com.msa4lmsv2payment.global.error.DocumentAlreadyRevokedException;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
 import jakarta.persistence.EnumType;
@@ -8,7 +9,6 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import com.msa4lmsv2payment.global.error.DocumentAlreadyRevokedException;
 import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;

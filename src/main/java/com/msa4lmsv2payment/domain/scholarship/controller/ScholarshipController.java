@@ -1,12 +1,12 @@
 package com.msa4lmsv2payment.domain.scholarship.controller;
 
+import com.msa4lmsv2payment.domain.installment.service.InstallmentPlanService;
 import com.msa4lmsv2payment.domain.scholarship.request.PaymentScholarshipAllocationRequestDTO;
 import com.msa4lmsv2payment.domain.scholarship.request.ScholarshipDiscountRequestDTO;
 import com.msa4lmsv2payment.domain.scholarship.response.MyScholarshipResponseDTO;
 import com.msa4lmsv2payment.domain.scholarship.response.PaymentScholarshipAllocationResponseDTO;
 import com.msa4lmsv2payment.domain.scholarship.response.ScholarshipResponseDTO;
 import com.msa4lmsv2payment.domain.scholarship.service.ScholarshipService;
-import com.msa4lmsv2payment.domain.installment.service.InstallmentPlanService;
 import com.msa4lmsv2payment.global.config.openapi.CustomApiResponse;
 import com.msa4lmsv2payment.global.response.constant.CustomResponseCode;
 import com.msa4lmsv2payment.global.response.GlobalResponseDTO;
