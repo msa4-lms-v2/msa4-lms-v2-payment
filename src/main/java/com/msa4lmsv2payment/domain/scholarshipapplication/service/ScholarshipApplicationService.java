@@ -1,8 +1,10 @@
 package com.msa4lmsv2payment.domain.scholarshipapplication.service;
 
+import com.msa4lmsv2payment.domain.scholarship.request.PaymentScholarshipAllocationRequestDTO;
 import com.msa4lmsv2payment.domain.scholarship.request.ScholarshipDiscountRequestDTO;
 import com.msa4lmsv2payment.domain.scholarship.response.ScholarshipResponseDTO;
 import com.msa4lmsv2payment.domain.scholarship.service.ScholarshipService;
+import com.msa4lmsv2payment.domain.installment.service.InstallmentPlanService;
 import com.msa4lmsv2payment.domain.scholarshipapplication.entity.ScholarshipApplication;
 import com.msa4lmsv2payment.domain.scholarshipapplication.entity.ScholarshipApplicationPeriod;
 import com.msa4lmsv2payment.domain.scholarshipapplication.entity.ScholarshipApplicationStatus;
@@ -29,6 +31,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -44,6 +47,7 @@ public class ScholarshipApplicationService {
     private final ScholarshipService scholarshipService;
     private final ScholarshipApplicationRecorderService scholarshipApplicationRecorder;
     private final AuditLogRecorder auditLogRecorder;
+    private final InstallmentPlanService installmentPlanService;
 
     // 소유권 검증과 신청기간 판단(고지의 semesterId 확인)이 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다.
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
@@ -87,6 +91,11 @@ public class ScholarshipApplicationService {
                     application.getTuitionBillId(), application.getType(), application.getRequestedAmount(),
                     "장학금 신청 승인: " + application.getReason()));
             application.approve(admin.id(), scholarship.id());
+
+            // 승인된 분할납부 계획이 있으면 아직 납부하지 않은 회차 금액을 새 실납부액 기준으로 다시 나눈다.
+            BigDecimal newActualPaymentAmount = scholarshipService.calculateAllocation(
+                    admin, new PaymentScholarshipAllocationRequestDTO(application.getTuitionBillId())).actualPaymentAmount();
+            installmentPlanService.recalculateForScholarshipChange(admin.id(), application.getTuitionBillId(), newActualPaymentAmount);
         } else {
             requireRejectReason(request.rejectReason());
             application.reject(admin.id(), request.rejectReason());

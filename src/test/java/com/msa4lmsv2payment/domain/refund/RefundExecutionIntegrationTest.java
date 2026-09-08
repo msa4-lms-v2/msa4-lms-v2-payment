@@ -165,4 +165,46 @@ class RefundExecutionIntegrationTest {
         assertThat(refundRepository.findById(pgCancelRefund.id())).isPresent();
         assertThat(refundRepository.findByTuitionBillIdOrderByRequestedAtDesc(bill.getId())).hasSize(2);
     }
+
+    @Test
+    void 카드결제_부분취소는_지정한_금액만_취소하고_전액취소와_구분된다() {
+        TuitionBill bill = tuitionBillRepository.save(
+                new TuitionBill(54L, 1L, BigDecimal.valueOf(1_000_000), LocalDate.now().plusDays(30), TuitionBillStatus.UNPAID, 1L));
+        Payment payment = new Payment(bill.getId(), bill.getStudentId(), BigDecimal.valueOf(1_000_000), PaymentMethod.CARD, PaymentStatus.REQUESTED);
+        payment.succeed("pk-card-partial-1");
+        payment = paymentRepository.save(payment);
+
+        RefundResponseDTO created = refundService.createPgCancelRefund(ADMIN,
+                new PgCancelRefundRequestDTO(payment.getId(), BigDecimal.valueOf(300_000), "일부 항목 환불"));
+        assertThat(created.status()).isEqualTo(RefundStatus.REQUESTED);
+        assertThat(created.amount()).isEqualByComparingTo(BigDecimal.valueOf(300_000));
+
+        when(tossPaymentsClient.cancelPayment(eq("pk-card-partial-1"), eq("일부 항목 환불"), eq(BigDecimal.valueOf(300_000)), isNull(), any()))
+                .thenReturn(new TossPaymentResponse("pk-card-partial-1", "PAYMENT-" + payment.getId(), "CANCELED", 300_000L));
+
+        RefundResponseDTO executed = refundService.executeRefund(ADMIN, created.id(),
+                new RefundExecuteRequestDTO("일부 항목 환불", null, null, null), "idem-pg-cancel-partial-1");
+
+        assertThat(executed.status()).isEqualTo(RefundStatus.SUCCEEDED);
+        assertThat(executed.amount()).isEqualByComparingTo(BigDecimal.valueOf(300_000));
+        verify(tossPaymentsClient).cancelPayment(eq("pk-card-partial-1"), any(), eq(BigDecimal.valueOf(300_000)), isNull(), any());
+    }
+
+    @Test
+    void 같은_결제에_취소를_재요청하면_새로_만들지_않고_기존_REQUESTED_건의_금액만_갱신한다() {
+        TuitionBill bill = tuitionBillRepository.save(
+                new TuitionBill(55L, 1L, BigDecimal.valueOf(1_000_000), LocalDate.now().plusDays(30), TuitionBillStatus.UNPAID, 1L));
+        Payment payment = new Payment(bill.getId(), bill.getStudentId(), BigDecimal.valueOf(1_000_000), PaymentMethod.CARD, PaymentStatus.REQUESTED);
+        payment.succeed("pk-card-requeue-1");
+        payment = paymentRepository.save(payment);
+
+        RefundResponseDTO first = refundService.createPgCancelRefund(ADMIN,
+                new PgCancelRefundRequestDTO(payment.getId(), BigDecimal.valueOf(200_000), "1차 요청"));
+        RefundResponseDTO second = refundService.createPgCancelRefund(ADMIN,
+                new PgCancelRefundRequestDTO(payment.getId(), BigDecimal.valueOf(500_000), "2차 요청으로 금액 정정"));
+
+        assertThat(second.id()).isEqualTo(first.id());
+        assertThat(second.amount()).isEqualByComparingTo(BigDecimal.valueOf(500_000));
+        assertThat(refundRepository.findByTuitionBillIdOrderByRequestedAtDesc(bill.getId())).hasSize(1);
+    }
 }
