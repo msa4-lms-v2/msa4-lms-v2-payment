@@ -179,6 +179,14 @@ public class PaymentService {
         return !paymentRepository.findByTuitionBillIdAndStatus(tuitionBillId, PaymentStatus.SUCCEEDED).isEmpty();
     }
 
+    // 관리자 환불·PG취소 관리 화면에서 취소 대상 결제를 고르기 위한 결제 이력 조회.
+    public List<PaymentResponseDTO> listPaymentsForBill(Long tuitionBillId) {
+        tuitionBillService.getTuitionBillOrThrow(tuitionBillId);
+        return paymentRepository.findByTuitionBillId(tuitionBillId).stream()
+                .map(PaymentResponseDTO::from)
+                .toList();
+    }
+
     // 납부 현황 반영(읽기)
     public PaymentSummaryResponseDTO getPaymentSummary(CurrentUser currentUser, Long tuitionBillId) {
         TuitionBill tuitionBill = tuitionBillService.getOwnedTuitionBillOrThrow(currentUser, tuitionBillId);
