@@ -2,7 +2,9 @@ package com.msa4lmsv2payment.domain.document;
 
 import com.msa4lmsv2payment.domain.document.entity.Document;
 import com.msa4lmsv2payment.domain.document.entity.DocumentType;
+import com.msa4lmsv2payment.domain.document.entity.DocumentVerificationResult;
 import com.msa4lmsv2payment.domain.document.repository.DocumentRepository;
+import com.msa4lmsv2payment.domain.document.repository.DocumentVerificationRepository;
 import com.msa4lmsv2payment.global.security.filter.GatewayContextAuthenticationFilter;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -44,6 +47,9 @@ class CertificateSecurityIntegrationTest {
 
     @Autowired
     private DocumentRepository documentRepository;
+
+    @Autowired
+    private DocumentVerificationRepository documentVerificationRepository;
 
     @Test
     void 진위확인은_인증_헤더_없이_호출할_수_있고_개인정보를_담지_않는다() throws Exception {
@@ -124,16 +130,21 @@ class CertificateSecurityIntegrationTest {
     }
 
     @Test
-    void qrHash가_변조되면_서명불일치로_400을_반환한다() throws Exception {
+    void qrHash가_변조되면_서명불일치로_400을_반환하고_위변조_시도가_감사_기록에_남는다() throws Exception {
         String token = "token-sig-tampered-1";
         String realHash = sha256Hex(token);
-        documentRepository.save(new Document(85L, null, DocumentType.PAYMENT_CERTIFICATE, token, realHash));
+        Document document = documentRepository.save(new Document(85L, null, DocumentType.PAYMENT_CERTIFICATE, token, realHash));
 
         mockMvc.perform(get("/api/payment/certificates/verify")
                         .param("token", token)
                         .param("qrHash", "0000000000000000000000000000000000000000000000000000000000000000"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("E21"));
+
+        assertThat(documentVerificationRepository.findAll()).anySatisfy(verification -> {
+            assertThat(verification.getDocumentId()).isEqualTo(document.getId());
+            assertThat(verification.getResult()).isEqualTo(DocumentVerificationResult.SIGNATURE_MISMATCH);
+        });
     }
 
     private String sha256Hex(String value) throws Exception {

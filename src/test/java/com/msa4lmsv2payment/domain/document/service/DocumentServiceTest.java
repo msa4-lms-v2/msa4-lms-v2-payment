@@ -19,6 +19,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionStatus;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -29,6 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -43,13 +46,16 @@ class DocumentServiceTest {
     @Mock TuitionBillService tuitionBillService;
     @Mock PaymentService paymentService;
     @Mock AuditLogRecorder auditLogRecorder;
+    @Mock PlatformTransactionManager transactionManager;
+    @Mock TransactionStatus transactionStatus;
 
     private DocumentService service;
 
     @BeforeEach
     void setUp() {
+        lenient().when(transactionManager.getTransaction(any())).thenReturn(transactionStatus);
         service = new DocumentService(documentRepository, documentVerificationRepository,
-                tuitionBillService, paymentService, auditLogRecorder);
+                tuitionBillService, paymentService, auditLogRecorder, transactionManager);
     }
 
     private String sha256(String value) throws Exception {
@@ -88,13 +94,13 @@ class DocumentServiceTest {
     }
 
     @Test
-    void qrHash가_토큰_해시와_다르면_서명불일치로_거부한다() throws Exception {
+    void qrHash가_토큰_해시와_다르면_서명불일치로_거부하고_위변조_시도를_기록한다() throws Exception {
         Document document = new Document(1L, null, DocumentType.PAYMENT_CERTIFICATE, TOKEN, sha256(TOKEN));
         when(documentRepository.findByVerificationToken(TOKEN)).thenReturn(Optional.of(document));
 
         assertThrows(DocumentSignatureMismatchException.class,
                 () -> service.verifyCertificate(TOKEN, "tampered-hash", "127.0.0.1"));
-        verify(documentVerificationRepository, never()).save(any());
+        verify(documentVerificationRepository).save(any());
     }
 
     @Test
