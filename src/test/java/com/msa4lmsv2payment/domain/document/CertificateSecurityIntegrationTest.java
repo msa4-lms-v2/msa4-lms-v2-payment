@@ -2,7 +2,9 @@ package com.msa4lmsv2payment.domain.document;
 
 import com.msa4lmsv2payment.domain.document.entity.Document;
 import com.msa4lmsv2payment.domain.document.entity.DocumentType;
+import com.msa4lmsv2payment.domain.document.entity.DocumentVerificationResult;
 import com.msa4lmsv2payment.domain.document.repository.DocumentRepository;
+import com.msa4lmsv2payment.domain.document.repository.DocumentVerificationRepository;
 import com.msa4lmsv2payment.global.security.filter.GatewayContextAuthenticationFilter;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +18,11 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.HexFormat;
+
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -40,6 +47,9 @@ class CertificateSecurityIntegrationTest {
 
     @Autowired
     private DocumentRepository documentRepository;
+
+    @Autowired
+    private DocumentVerificationRepository documentVerificationRepository;
 
     @Test
     void 진위확인은_인증_헤더_없이_호출할_수_있고_개인정보를_담지_않는다() throws Exception {
@@ -103,5 +113,42 @@ class CertificateSecurityIntegrationTest {
         mockMvc.perform(get("/api/payment/certificates/verify").param("token", "token-revoke-3"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.result").value("REVOKED"));
+    }
+
+    // SCRUM-183 - QR에 담긴 서명(qrHash)이 토큰의 실제 SHA-256 해시와 다르면(위조된 QR·수동 조작 시도)
+    // HTTP 계층까지 관통해 거부되는지 확인한다. 기존 테스트들은 qrHash 파라미터 자체를 넘긴 적이 없어
+    // DocumentController -> DocumentService의 서명 검증 경로가 실제로는 검증되지 않고 있었다.
+    @Test
+    void qrHash가_토큰의_실제_해시와_일치하면_VALID를_반환한다() throws Exception {
+        String token = "token-sig-match-1";
+        String realHash = sha256Hex(token);
+        documentRepository.save(new Document(84L, null, DocumentType.PAYMENT_CERTIFICATE, token, realHash));
+
+        mockMvc.perform(get("/api/payment/certificates/verify").param("token", token).param("qrHash", realHash))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.result").value("VALID"));
+    }
+
+    @Test
+    void qrHash가_변조되면_서명불일치로_400을_반환하고_위변조_시도가_감사_기록에_남는다() throws Exception {
+        String token = "token-sig-tampered-1";
+        String realHash = sha256Hex(token);
+        Document document = documentRepository.save(new Document(85L, null, DocumentType.PAYMENT_CERTIFICATE, token, realHash));
+
+        mockMvc.perform(get("/api/payment/certificates/verify")
+                        .param("token", token)
+                        .param("qrHash", "0000000000000000000000000000000000000000000000000000000000000000"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("E21"));
+
+        assertThat(documentVerificationRepository.findAll()).anySatisfy(verification -> {
+            assertThat(verification.getDocumentId()).isEqualTo(document.getId());
+            assertThat(verification.getResult()).isEqualTo(DocumentVerificationResult.SIGNATURE_MISMATCH);
+        });
+    }
+
+    private String sha256Hex(String value) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
     }
 }

@@ -19,10 +19,11 @@ import com.msa4lmsv2payment.global.error.DocumentNotFoundException;
 import com.msa4lmsv2payment.global.error.DocumentSignatureMismatchException;
 import com.msa4lmsv2payment.global.error.PaymentNotCompletedException;
 import com.msa4lmsv2payment.global.security.CurrentUser;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -32,7 +33,6 @@ import java.util.Map;
 import java.util.UUID;
 
 @Service
-@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class DocumentService {
 
@@ -41,6 +41,19 @@ public class DocumentService {
     private final TuitionBillService tuitionBillService;
     private final PaymentService paymentService;
     private final AuditLogRecorder auditLogRecorder;
+    private final TransactionTemplate requiresNewTransaction;
+
+    public DocumentService(DocumentRepository documentRepository, DocumentVerificationRepository documentVerificationRepository,
+                            TuitionBillService tuitionBillService, PaymentService paymentService, AuditLogRecorder auditLogRecorder,
+                            PlatformTransactionManager transactionManager) {
+        this.documentRepository = documentRepository;
+        this.documentVerificationRepository = documentVerificationRepository;
+        this.tuitionBillService = tuitionBillService;
+        this.paymentService = paymentService;
+        this.auditLogRecorder = auditLogRecorder;
+        this.requiresNewTransaction = new TransactionTemplate(transactionManager);
+        this.requiresNewTransaction.setPropagationBehavior(TransactionTemplate.PROPAGATION_REQUIRES_NEW);
+    }
 
     // 납부 확인서 - 실제 납부 이력이 있는 고지에만 발급한다.
     // 소유권 검증이 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다.
@@ -67,6 +80,9 @@ public class DocumentService {
                 .orElseThrow(() -> new DocumentNotFoundException("유효하지 않은 검증 토큰입니다."));
 
         if (qrHash != null && !qrHash.isBlank() && !hash(token).equals(qrHash)) {
+            // 이 요청 자체는 실패로 끝나 롤백되므로, 위변조 시도 기록은 별도 트랜잭션으로 커밋해 남긴다.
+            requiresNewTransaction.executeWithoutResult(status -> documentVerificationRepository.save(
+                    new DocumentVerification(document.getId(), verifierIp, DocumentVerificationResult.SIGNATURE_MISMATCH)));
             throw new DocumentSignatureMismatchException("서명이 일치하지 않습니다.");
         }
 
