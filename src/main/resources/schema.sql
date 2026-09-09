@@ -469,7 +469,7 @@ CREATE TABLE IF NOT EXISTS document_verifications (
     document_id  BIGINT NOT NULL,
     verified_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     verifier_ip  VARCHAR(45) COMMENT 'IPv6 최대 길이, nullable',
-    result       VARCHAR(20) NOT NULL COMMENT 'VALID, REVOKED, EXPIRED',
+    result       VARCHAR(20) NOT NULL COMMENT 'VALID, REVOKED, EXPIRED, SIGNATURE_MISMATCH',
     INDEX idx_document_verifications_document_id (document_id),
     CONSTRAINT fk_document_verifications_document FOREIGN KEY (document_id) REFERENCES documents (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
