@@ -38,6 +38,7 @@ import com.msa4lmsv2payment.global.client.TossRefundReceiveAccount;
 import com.msa4lmsv2payment.global.security.CurrentUser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -258,6 +259,16 @@ public class RefundService {
         }
         BigDecimal rate = amount.divide(payment.getAmount(), 4, RoundingMode.HALF_UP);
 
+        try {
+            return savePgCancelRefund(admin, payment, amount, rate);
+        } catch (DataIntegrityViolationException duplicate) {
+            // uk_refunds_dedup(PAY:paymentId) 위반 - 조회와 저장 사이에 동시 요청이 먼저 커밋된 경우.
+            // 방금 생긴 REQUESTED 건을 다시 조회해 이번 요청 금액으로 갱신한다(순차 재요청과 동일하게 처리).
+            return savePgCancelRefund(admin, payment, amount, rate);
+        }
+    }
+
+    private RefundResponseDTO savePgCancelRefund(CurrentUser admin, Payment payment, BigDecimal amount, BigDecimal rate) {
         Refund refund = refundRepository.findByPaymentIdAndRefundType(payment.getId(), RefundType.PG_CANCEL)
                 .orElseGet(() -> new Refund(payment.getTuitionBillId(), RefundType.PG_CANCEL, amount, rate, RefundStatus.REQUESTED));
         if (refund.getStatus() == RefundStatus.SUCCEEDED) {
