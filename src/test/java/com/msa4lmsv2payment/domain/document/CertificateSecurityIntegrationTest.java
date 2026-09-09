@@ -16,6 +16,10 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.HexFormat;
+
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -103,5 +107,37 @@ class CertificateSecurityIntegrationTest {
         mockMvc.perform(get("/api/payment/certificates/verify").param("token", "token-revoke-3"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.result").value("REVOKED"));
+    }
+
+    // SCRUM-183 - QR에 담긴 서명(qrHash)이 토큰의 실제 SHA-256 해시와 다르면(위조된 QR·수동 조작 시도)
+    // HTTP 계층까지 관통해 거부되는지 확인한다. 기존 테스트들은 qrHash 파라미터 자체를 넘긴 적이 없어
+    // DocumentController -> DocumentService의 서명 검증 경로가 실제로는 검증되지 않고 있었다.
+    @Test
+    void qrHash가_토큰의_실제_해시와_일치하면_VALID를_반환한다() throws Exception {
+        String token = "token-sig-match-1";
+        String realHash = sha256Hex(token);
+        documentRepository.save(new Document(84L, null, DocumentType.PAYMENT_CERTIFICATE, token, realHash));
+
+        mockMvc.perform(get("/api/payment/certificates/verify").param("token", token).param("qrHash", realHash))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.result").value("VALID"));
+    }
+
+    @Test
+    void qrHash가_변조되면_서명불일치로_400을_반환한다() throws Exception {
+        String token = "token-sig-tampered-1";
+        String realHash = sha256Hex(token);
+        documentRepository.save(new Document(85L, null, DocumentType.PAYMENT_CERTIFICATE, token, realHash));
+
+        mockMvc.perform(get("/api/payment/certificates/verify")
+                        .param("token", token)
+                        .param("qrHash", "0000000000000000000000000000000000000000000000000000000000000000"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("E21"));
+    }
+
+    private String sha256Hex(String value) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
     }
 }
