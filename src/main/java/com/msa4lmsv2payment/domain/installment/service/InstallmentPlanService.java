@@ -25,6 +25,7 @@ import com.msa4lmsv2payment.global.error.InstallmentPlanNotFoundException;
 import com.msa4lmsv2payment.global.error.RejectReasonRequiredException;
 import com.msa4lmsv2payment.global.security.CurrentUser;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -61,9 +62,16 @@ public class InstallmentPlanService {
         BigDecimal actualPaymentAmount = scholarshipService.calculateAllocation(
                 currentUser, new PaymentScholarshipAllocationRequestDTO(tuitionBill.getId())).actualPaymentAmount();
 
-        InstallmentPlan saved = installmentPlanRecorder.saveWithAudit(currentUser.id(),
-                new InstallmentPlan(tuitionBill.getId(), request.totalRounds()),
-                buildItems(actualPaymentAmount, request.totalRounds(), tuitionBill.getDueDate()));
+        InstallmentPlan saved;
+        try {
+            saved = installmentPlanRecorder.saveWithAudit(currentUser.id(),
+                    new InstallmentPlan(tuitionBill.getId(), request.totalRounds()),
+                    buildItems(actualPaymentAmount, request.totalRounds(), tuitionBill.getDueDate()));
+        } catch (DataIntegrityViolationException duplicate) {
+            // 사전 존재 여부 확인(findByTuitionBillId)과 저장 사이의 경합 창에서 동시에 신청된 경우 -
+            // uk_installment_plans_tuition_bill_id가 실제 중복 생성은 막아주므로 이 예외로 바꿔 안내한다.
+            throw new InstallmentPlanAlreadyExistsException("이미 분할납부 계획이 존재하는 고지입니다.");
+        }
 
         return toResponse(saved);
     }
