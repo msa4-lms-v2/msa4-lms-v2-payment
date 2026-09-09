@@ -11,15 +11,15 @@ public record GlobalResponseDTO<T>(
 ) {
 
     public static <T> GlobalResponseDTO<T> success(T data) {
-        return new GlobalResponseDTO<>(CustomResponseCode.SUCCESS.getCode(), CustomResponseCode.SUCCESS.name(), data);
+        return new GlobalResponseDTO<>(CustomResponseCode.SUCCESS.getCode(), CustomResponseCode.SUCCESS.getMessage(), data);
     }
 
     public static GlobalResponseDTO<Void> success() {
-        return new GlobalResponseDTO<>(CustomResponseCode.SUCCESS.getCode(), CustomResponseCode.SUCCESS.name(), null);
+        return new GlobalResponseDTO<>(CustomResponseCode.SUCCESS.getCode(), CustomResponseCode.SUCCESS.getMessage(), null);
     }
 
     public static <T> GlobalResponseDTO<T> fail(CustomResponseCode c, T data) {
-        return new GlobalResponseDTO<>(c.getCode(), c.name(), data);
+        return new GlobalResponseDTO<>(c.getCode(), c.getMessage(), data);
     }
 
     // BusinessException은 코드가 아니라 발생 시점의 구체적인 사유(exception.getMessage())를 응답에 담아야 한다.
