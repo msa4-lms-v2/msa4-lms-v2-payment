@@ -1,7 +1,10 @@
 package com.msa4lmsv2payment.domain.tuitionbill.service;
 
 import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBill;
+import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBillItem;
 import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBillStatus;
+import com.msa4lmsv2payment.domain.tuitionbill.repository.TuitionBillItemRepository;
+import com.msa4lmsv2payment.domain.tuitionbill.response.TuitionBillItemResponseDTO;
 import com.msa4lmsv2payment.global.error.TuitionBillAccessDeniedException;
 import com.msa4lmsv2payment.global.error.TuitionBillNotFoundException;
 import com.msa4lmsv2payment.domain.tuitionbill.repository.TuitionBillQueryRepository;
@@ -17,6 +20,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -27,6 +32,7 @@ public class TuitionBillService {
     private static final int MAX_PAGE_SIZE = 100;
 
     private final TuitionBillRepository tuitionBillRepository;
+    private final TuitionBillItemRepository tuitionBillItemRepository;
     private final TuitionBillQueryRepository tuitionBillQueryRepository;
     private final AcademicClient academicClient;
     private final TuitionBillRecorderService tuitionBillRecorder;
@@ -48,7 +54,28 @@ public class TuitionBillService {
                 admin.id()
         );
 
-        return TuitionBillResponseDTO.from(tuitionBillRecorder.saveWithAudit(admin.id(), tuitionBill));
+        BigDecimal studentCouncilFee = request.studentCouncilFeeAmount();
+        BigDecimal tuitionAmount = studentCouncilFee != null
+                ? request.billingAmount().subtract(studentCouncilFee)
+                : request.billingAmount();
+
+        List<TuitionBillItemSpec> items = new ArrayList<>();
+        items.add(new TuitionBillItemSpec("수업료", tuitionAmount));
+        if (studentCouncilFee != null && studentCouncilFee.signum() > 0) {
+            items.add(new TuitionBillItemSpec("학생회비", studentCouncilFee));
+        }
+
+        return TuitionBillResponseDTO.from(tuitionBillRecorder.saveWithAudit(admin.id(), tuitionBill, items));
+    }
+
+    // 등록금 상세 내역(항목별 금액·납입여부) 조회 - getOwnedTuitionBillOrThrow가 STUDENT 호출 시
+    // Academic을 부를 수 있어 트랜잭션 밖에서 실행한다.
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public List<TuitionBillItemResponseDTO> getTuitionBillItems(CurrentUser currentUser, Long tuitionBillId) {
+        getOwnedTuitionBillOrThrow(currentUser, tuitionBillId);
+        return tuitionBillItemRepository.findByTuitionBillIdOrderByIdAsc(tuitionBillId).stream()
+                .map(TuitionBillItemResponseDTO::from)
+                .toList();
     }
 
     // 학생 등록금 고지서 조회 - 관리자 등록금 고지가 만든 고지 단건을 학생이 확인한다.
@@ -136,6 +163,10 @@ public class TuitionBillService {
     @Transactional
     public void changeStatus(Long tuitionBillId, TuitionBillStatus status) {
         getTuitionBillOrThrow(tuitionBillId).changeStatus(status);
+        if (status == TuitionBillStatus.PAID) {
+            tuitionBillItemRepository.findByTuitionBillIdOrderByIdAsc(tuitionBillId)
+                    .forEach(TuitionBillItem::markPaid);
+        }
     }
 
     // Academic 호출 동안 DB 커넥션을 붙잡지 않도록 트랜잭션 밖에서 실행한다.

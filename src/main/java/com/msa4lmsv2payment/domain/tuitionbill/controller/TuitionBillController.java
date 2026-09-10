@@ -2,6 +2,7 @@ package com.msa4lmsv2payment.domain.tuitionbill.controller;
 
 import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBillStatus;
 import com.msa4lmsv2payment.domain.tuitionbill.request.TuitionBillCreateRequestDTO;
+import com.msa4lmsv2payment.domain.tuitionbill.response.TuitionBillItemResponseDTO;
 import com.msa4lmsv2payment.domain.tuitionbill.response.TuitionBillResponseDTO;
 import com.msa4lmsv2payment.domain.tuitionbill.response.TuitionPaymentStatusResponseDTO;
 import com.msa4lmsv2payment.domain.tuitionbill.service.TuitionBillService;
@@ -19,6 +20,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -89,5 +91,17 @@ public class TuitionBillController {
             @RequestParam Long tuitionBillId
     ) {
         return GlobalResponseDTO.success(tuitionBillService.getTuitionPaymentStatus(currentUser, tuitionBillId));
+    }
+
+    @Operation(summary = "등록금 고지 항목별 내역 조회", description = "고지 1건에 속한 항목(수업료·학생회비 등)별 금액과 납입여부를 조회한다. STUDENT 본인 / ADMIN 관리 범위.")
+    @ApiResponse(responseCode = "200", description = "조회 성공")
+    @CustomApiResponse({CustomResponseCode.ACCESS_DENIED, CustomResponseCode.NOT_FOUND_DATA})
+    @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
+    @GetMapping("/api/payment/tuition-bills/{tuitionBillId}/items")
+    public GlobalResponseDTO<List<TuitionBillItemResponseDTO>> getTuitionBillItems(
+            @AuthenticationPrincipal CurrentUser currentUser,
+            @PathVariable Long tuitionBillId
+    ) {
+        return GlobalResponseDTO.success(tuitionBillService.getTuitionBillItems(currentUser, tuitionBillId));
     }
 }
