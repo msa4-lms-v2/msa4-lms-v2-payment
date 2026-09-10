@@ -3,6 +3,8 @@ package com.msa4lmsv2payment.global.kafka;
 import com.msa4lmsv2payment.domain.academicsnapshot.repository.SemesterSnapshotRepository;
 import com.msa4lmsv2payment.domain.academicsnapshot.repository.StudentSnapshotRepository;
 import com.msa4lmsv2payment.domain.academicsnapshot.repository.WithdrawalSnapshotRepository;
+import com.msa4lmsv2payment.domain.scholarshipapplication.entity.ScholarshipApplicationPeriod;
+import com.msa4lmsv2payment.domain.scholarshipapplication.repository.ScholarshipApplicationPeriodRepository;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +26,7 @@ public class AcademicEventConsumer {
     private final StudentSnapshotRepository studentSnapshotRepository;
     private final SemesterSnapshotRepository semesterSnapshotRepository;
     private final WithdrawalSnapshotRepository withdrawalSnapshotRepository;
+    private final ScholarshipApplicationPeriodRepository scholarshipApplicationPeriodRepository;
     private final ObjectMapper objectMapper;
 
     @KafkaListener(topics = "msa4-team3.academic.student-changed", groupId = GROUP_ID)
@@ -65,5 +68,29 @@ public class AcademicEventConsumer {
                 LocalDateTime.now()
         );
         log.info("WithdrawalApproved 반영 완료 withdrawalId={}", payload.get("withdrawalId").asLong());
+    }
+
+    @KafkaListener(topics = "msa4-team3.academic.scholarship-application-period-changed", groupId = GROUP_ID)
+    public void onScholarshipApplicationPeriodChanged(String message) {
+        JsonNode payload = objectMapper.readTree(message);
+        if (!"SCHOLARSHIP".equals(payload.get("category").asText())) {
+            return;
+        }
+
+        Long scheduleId = payload.get("scheduleId").asLong();
+        Long semesterId = payload.get("semesterId").asLong();
+        LocalDate startDate = LocalDate.parse(payload.get("startDate").asText());
+        LocalDate endDate = LocalDate.parse(payload.get("endDate").asText());
+        boolean active = payload.get("active").asBoolean();
+        Long createdBy = payload.get("createdBy").asLong();
+
+        scholarshipApplicationPeriodRepository.findByAcademicScheduleId(scheduleId)
+                .ifPresentOrElse(
+                        period -> period.changeFromAcademicSchedule(semesterId, startDate, endDate, active),
+                        () -> scholarshipApplicationPeriodRepository.save(
+                                new ScholarshipApplicationPeriod(semesterId, startDate, endDate, scheduleId, createdBy)
+                        )
+                );
+        log.info("Academic 학사일정 기반 장학금 신청기간 반영 완료 scheduleId={}", scheduleId);
     }
 }
