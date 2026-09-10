@@ -18,6 +18,9 @@ public record TuitionBillCreateRequestDTO(
         @DecimalMin(value = "1", message = "고지 금액은 0보다 커야 합니다.")
         @Digits(integer = 12, fraction = 0, message = "고지 금액은 원 단위 정수만 허용합니다.") BigDecimal billingAmount,
         @Schema(description = "납부 기한", example = "2026-09-30", requiredMode = Schema.RequiredMode.REQUIRED)
-        @NotNull(message = "납부 기한은 필수입니다.") LocalDate dueDate
+        @NotNull(message = "납부 기한은 필수입니다.") LocalDate dueDate,
+        @Schema(description = "학생회비(선택). 지정하면 고지 금액에서 이 금액을 뺀 나머지가 수업료 항목이 된다.", example = "6000")
+        @DecimalMin(value = "0", message = "학생회비는 0 이상이어야 합니다.")
+        @Digits(integer = 12, fraction = 0, message = "학생회비는 원 단위 정수만 허용합니다.") BigDecimal studentCouncilFeeAmount
 ) {
 }

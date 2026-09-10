@@ -1,6 +1,8 @@
 package com.msa4lmsv2payment.domain.tuitionbill.service;
 
 import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBill;
+import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBillItem;
+import com.msa4lmsv2payment.domain.tuitionbill.repository.TuitionBillItemRepository;
 import com.msa4lmsv2payment.domain.tuitionbill.repository.TuitionBillRepository;
 import com.msa4lmsv2payment.global.audit.AuditAction;
 import com.msa4lmsv2payment.global.audit.AuditLogRecorder;
@@ -8,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -19,11 +22,16 @@ import java.util.Map;
 public class TuitionBillRecorderService {
 
     private final TuitionBillRepository tuitionBillRepository;
+    private final TuitionBillItemRepository tuitionBillItemRepository;
     private final AuditLogRecorder auditLogRecorder;
 
     @Transactional
-    public TuitionBill saveWithAudit(Long actorId, TuitionBill tuitionBill) {
+    public TuitionBill saveWithAudit(Long actorId, TuitionBill tuitionBill, List<TuitionBillItemSpec> itemSpecs) {
         TuitionBill saved = tuitionBillRepository.save(tuitionBill);
+        List<TuitionBillItem> items = itemSpecs.stream()
+                .map(spec -> new TuitionBillItem(saved.getId(), spec.itemName(), spec.amount()))
+                .toList();
+        tuitionBillItemRepository.saveAll(items);
         auditLogRecorder.record(actorId, AuditAction.TUITION_BILL_CREATED, "TUITION_BILL", saved.getId(),
                 Map.of("studentId", saved.getStudentId(), "billingAmount", saved.getBillingAmount()), null);
         return saved;
