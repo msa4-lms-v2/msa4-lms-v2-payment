@@ -19,8 +19,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.util.HexFormat;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -121,7 +122,7 @@ class CertificateSecurityIntegrationTest {
     @Test
     void qrHash가_토큰의_실제_해시와_일치하면_VALID를_반환한다() throws Exception {
         String token = "token-sig-match-1";
-        String realHash = sha256Hex(token);
+        String realHash = hmacSignHex(token);
         documentRepository.save(new Document(84L, null, DocumentType.PAYMENT_CERTIFICATE, token, realHash));
 
         mockMvc.perform(get("/api/payment/certificates/verify").param("token", token).param("qrHash", realHash))
@@ -132,7 +133,7 @@ class CertificateSecurityIntegrationTest {
     @Test
     void qrHash가_변조되면_서명불일치로_400을_반환하고_위변조_시도가_감사_기록에_남는다() throws Exception {
         String token = "token-sig-tampered-1";
-        String realHash = sha256Hex(token);
+        String realHash = hmacSignHex(token);
         Document document = documentRepository.save(new Document(85L, null, DocumentType.PAYMENT_CERTIFICATE, token, realHash));
 
         mockMvc.perform(get("/api/payment/certificates/verify")
@@ -147,8 +148,10 @@ class CertificateSecurityIntegrationTest {
         });
     }
 
-    private String sha256Hex(String value) throws Exception {
-        MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
+    // DocumentService.hmacSign()과 동일한 알고리즘·키(application-test.yaml의 certificate.signing-key)로 계산한다.
+    private String hmacSignHex(String value) throws Exception {
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(new SecretKeySpec("test-signing-key-for-ci".getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+        return HexFormat.of().formatHex(mac.doFinal(value.getBytes(StandardCharsets.UTF_8)));
     }
 }

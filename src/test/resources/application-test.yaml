@@ -8,3 +8,15 @@ spring:
 toss:
   payments:
     secret-key: test-secret-key
+
+# Kafka와 같은 이유로 실제 공용 MinIO를 쓰지 않고 더미 값으로 컨텍스트만 기동시킨다.
+# 테스트가 실제로 업로드/다운로드를 검증해야 하면 FileStorageService를 목으로 대체한다.
+minio:
+  endpoint: http://localhost:19998
+  access-key: test-access-key
+  secret-key: test-secret-key
+  bucket: test-bucket
+
+certificate:
+  signing-key: test-signing-key-for-ci
+  client-base-url: http://localhost:5176

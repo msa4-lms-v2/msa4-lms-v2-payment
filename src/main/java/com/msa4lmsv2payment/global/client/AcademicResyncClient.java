@@ -50,6 +50,23 @@ public class AcademicResyncClient {
                 new ParameterizedTypeReference<>() {});
     }
 
+    // 증명서 발급 자격(재학·졸업요건, 재직 상태)은 스냅샷 테이블로 캐시하지 않고 매번 실시간으로 조회한다 -
+    // 발급 빈도가 낮고, 발급 시점의 최신 상태를 반영해야 하는 문서라 캐시 신선도 문제를 감수할 이유가 없다.
+    public Optional<StudentCertificateEligibilityResponse> fetchStudentCertificateEligibility(Long studentId) {
+        return get("/api/academic/students/{studentId}/certificate-snapshot", studentId,
+                new ParameterizedTypeReference<>() {});
+    }
+
+    public Optional<ProfessorCertificateEligibilityResponse> fetchProfessorCertificateEligibility(Long professorId) {
+        return get("/api/academic/professors/{professorId}/certificate-snapshot", professorId,
+                new ParameterizedTypeReference<>() {});
+    }
+
+    public Optional<ProfessorCertificateEligibilityResponse> fetchProfessorCertificateEligibilityByUserId(Long userId) {
+        return get("/api/academic/professors/by-user/{userId}/certificate-snapshot", userId,
+                new ParameterizedTypeReference<>() {});
+    }
+
     private <T> Optional<T> get(String uriTemplate, Long id, ParameterizedTypeReference<InternalApiResponse<T>> typeRef) {
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
