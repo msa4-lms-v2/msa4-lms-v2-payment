@@ -393,9 +393,11 @@ CREATE TABLE IF NOT EXISTS scholarship_application_periods (
     start_date           DATE NOT NULL,
     end_date             DATE NOT NULL,
     academic_schedule_id BIGINT COMMENT 'Academic.academic_schedules.id 참조, FK 아님. 학사일정 공지와 연결할 때만 채움(선택)',
+    is_active           BOOLEAN NOT NULL DEFAULT TRUE,
     created_by           BIGINT NOT NULL COMMENT 'Academic.users.id 참조, FK 아님',
     created_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_scholarship_application_periods_semester_id (semester_id)
+    INDEX idx_scholarship_application_periods_semester_id (semester_id),
+    CONSTRAINT uk_scholarship_application_periods_schedule UNIQUE (academic_schedule_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS scholarship_applications (

@@ -7,4 +7,6 @@ import java.util.Optional;
 
 public interface ScholarshipApplicationPeriodRepository extends JpaRepository<ScholarshipApplicationPeriod, Long> {
     Optional<ScholarshipApplicationPeriod> findTopBySemesterIdOrderByCreatedAtDesc(Long semesterId);
+
+    Optional<ScholarshipApplicationPeriod> findByAcademicScheduleId(Long academicScheduleId);
 }
