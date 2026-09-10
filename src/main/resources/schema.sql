@@ -473,3 +473,15 @@ CREATE TABLE IF NOT EXISTS document_verifications (
     INDEX idx_document_verifications_document_id (document_id),
     CONSTRAINT fk_document_verifications_document FOREIGN KEY (document_id) REFERENCES documents (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 2026-09-10: 등록금 고지 항목별 내역(수업료/학생회비 등). 백필은 migration/20260910_create_tuition_bill_items.sql 참고.
+CREATE TABLE IF NOT EXISTS tuition_bill_items (
+    id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+    tuition_bill_id BIGINT NOT NULL,
+    item_name       VARCHAR(50) NOT NULL,
+    amount          DECIMAL(12, 0) NOT NULL,
+    paid            BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_tuition_bill_items_tuition_bill_id (tuition_bill_id),
+    CONSTRAINT fk_tuition_bill_items_tuition_bill FOREIGN KEY (tuition_bill_id) REFERENCES tuition_bills (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
