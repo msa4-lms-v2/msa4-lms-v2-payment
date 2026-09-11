@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 public record ScholarshipApplicationResponseDTO(
         @Schema(description = "신청 ID") Long id,
@@ -19,13 +20,19 @@ public record ScholarshipApplicationResponseDTO(
         @Schema(description = "심사 시각") LocalDateTime reviewedAt,
         @Schema(description = "반려 사유") String rejectReason,
         @Schema(description = "승인 시 생성된 장학금 ID") Long scholarshipId,
-        @Schema(description = "생성 시각") LocalDateTime createdAt
+        @Schema(description = "생성 시각") LocalDateTime createdAt,
+        @Schema(description = "증빙 첨부파일 목록") List<ScholarshipApplicationAttachmentResponseDTO> attachments
 ) {
     public static ScholarshipApplicationResponseDTO from(ScholarshipApplication application) {
+        return from(application, List.of());
+    }
+
+    public static ScholarshipApplicationResponseDTO from(ScholarshipApplication application,
+                                                           List<ScholarshipApplicationAttachmentResponseDTO> attachments) {
         return new ScholarshipApplicationResponseDTO(
                 application.getId(), application.getTuitionBillId(), application.getType(),
                 application.getRequestedAmount(), application.getReason(), application.getStatus(),
                 application.getReviewedBy(), application.getReviewedAt(), application.getRejectReason(),
-                application.getScholarshipId(), application.getCreatedAt());
+                application.getScholarshipId(), application.getCreatedAt(), attachments);
     }
 }

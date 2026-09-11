@@ -16,6 +16,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,8 +25,10 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -42,12 +45,28 @@ public class ScholarshipApplicationController {
             CustomResponseCode.NOT_FOUND_DATA, CustomResponseCode.DUPLICATE_DATA})
     @PreAuthorize("hasRole('STUDENT')")
     @ResponseStatus(HttpStatus.CREATED)
-    @PostMapping("/api/payment/scholarship-applications")
+    @PostMapping(value = "/api/payment/scholarship-applications", consumes = MediaType.APPLICATION_JSON_VALUE)
     public GlobalResponseDTO<ScholarshipApplicationResponseDTO> createApplication(
             @AuthenticationPrincipal CurrentUser student,
             @RequestBody @Valid ScholarshipApplicationCreateRequestDTO request
     ) {
         return GlobalResponseDTO.success(scholarshipApplicationService.createApplication(student, request));
+    }
+
+    @Operation(summary = "장학금 신청(증빙파일 첨부)", description = "STUDENT가 신청과 함께 PDF 증빙 파일을 첨부한다(최대 5개, 파일당 10MB, 전체 20MB). "
+            + "그 외 신청 조건은 JSON 전용 엔드포인트와 동일하다.")
+    @ApiResponse(responseCode = "201", description = "신청 성공")
+    @CustomApiResponse({CustomResponseCode.INVALID_PARAMETER, CustomResponseCode.ACCESS_DENIED,
+            CustomResponseCode.NOT_FOUND_DATA, CustomResponseCode.DUPLICATE_DATA})
+    @PreAuthorize("hasRole('STUDENT')")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PostMapping(value = "/api/payment/scholarship-applications", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public GlobalResponseDTO<ScholarshipApplicationResponseDTO> createApplicationWithAttachments(
+            @AuthenticationPrincipal CurrentUser student,
+            @Valid @RequestPart("request") ScholarshipApplicationCreateRequestDTO request,
+            @RequestPart(value = "files", required = false) List<MultipartFile> files
+    ) {
+        return GlobalResponseDTO.success(scholarshipApplicationService.createApplication(student, request, files));
     }
 
     @Operation(summary = "내 장학금 신청 내역", description = "STUDENT 본인이 신청한 장학금 목록을 최신순으로 조회한다.")
