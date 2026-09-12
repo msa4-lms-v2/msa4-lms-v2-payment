@@ -2,6 +2,7 @@ package com.msa4lmsv2payment.domain.virtualaccount.service;
 
 import com.msa4lmsv2payment.domain.installment.entity.InstallmentPlanItem;
 import com.msa4lmsv2payment.domain.installment.service.InstallmentPlanService;
+import com.msa4lmsv2payment.domain.scholarship.service.ScholarshipService;
 import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBill;
 import com.msa4lmsv2payment.domain.tuitionbill.service.TuitionBillService;
 import com.msa4lmsv2payment.domain.virtualaccount.entity.VirtualAccount;
@@ -35,6 +36,7 @@ public class VirtualAccountService {
     private final InstallmentPlanService installmentPlanService;
     private final TossPaymentsClient tossPaymentsClient;
     private final VirtualAccountRecorderService virtualAccountRecorder;
+    private final ScholarshipService scholarshipService;
 
     // 가상계좌 발급. 입금 Webhook 없이 발급 자체만 완결한다.
     // Toss 호출 동안 DB 커넥션을 붙잡지 않도록 트랜잭션 밖에서 실행한다.
@@ -50,7 +52,9 @@ public class VirtualAccountService {
             InstallmentPlanItem item = installmentPlanService.getItemOrThrow(tuitionBill.getId(), installmentPlanItemId);
             amount = item.getAmount();
         } else {
-            amount = tuitionBill.getBillingAmount();
+            amount = tuitionBill.getBillingAmount()
+                    .subtract(scholarshipService.sumScholarshipAmount(tuitionBill.getId()))
+                    .max(BigDecimal.ZERO);
         }
 
         String orderId = "TB-" + tuitionBill.getId() + "-" + UUID.randomUUID().toString().substring(0, 8);
