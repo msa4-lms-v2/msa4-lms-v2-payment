@@ -4,6 +4,10 @@ server:
 spring:
   application:
     name: msa4-lms-v2-payment
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 20MB
   threads:
     virtual:
       enabled: true
