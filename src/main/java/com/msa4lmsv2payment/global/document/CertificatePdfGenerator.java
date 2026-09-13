@@ -34,7 +34,6 @@ public class CertificatePdfGenerator {
     private static final float MARGIN_X = 60f;
     private static final float TITLE_Y = 760f;
     private static final float ROW_START_Y = 680f;
-    private static final float ROW_HEIGHT = 28f;
     private static final float QR_SIZE = 110f;
 
     private final byte[] fontBytes;
@@ -49,56 +48,58 @@ public class CertificatePdfGenerator {
 
     public byte[] generate(String title, List<Map.Entry<String, String>> rows, String verifyUrl, LocalDateTime issuedAt) {
         try (PDDocument document = new PDDocument()) {
-            PDPage page = new PDPage(PDRectangle.A4);
-            document.addPage(page);
             PDType0Font font = PDType0Font.load(document, new ByteArrayInputStream(fontBytes), true);
-
-            try (PDPageContentStream contentStream = new PDPageContentStream(document, page)) {
-                contentStream.beginText();
-                contentStream.setFont(font, 22);
-                contentStream.newLineAtOffset(MARGIN_X, TITLE_Y);
-                contentStream.showText(title);
-                contentStream.endText();
-
-                float y = ROW_START_Y;
-                for (Map.Entry<String, String> row : rows) {
-                    contentStream.beginText();
-                    contentStream.setFont(font, 12);
-                    contentStream.newLineAtOffset(MARGIN_X, y);
-                    contentStream.showText(row.getKey());
-                    contentStream.endText();
-
-                    contentStream.beginText();
-                    contentStream.setFont(font, 12);
-                    contentStream.newLineAtOffset(MARGIN_X + 160, y);
-                    contentStream.showText(row.getValue() == null ? "-" : row.getValue());
-                    contentStream.endText();
-
-                    y -= ROW_HEIGHT;
-                }
-
-                contentStream.beginText();
-                contentStream.setFont(font, 11);
-                contentStream.newLineAtOffset(MARGIN_X, y - 20);
-                contentStream.showText("발급일: " + issuedAt.format(ISSUED_AT_FORMAT));
-                contentStream.endText();
-
-                PDImageXObject qrImage = LosslessFactory.createFromImage(document, renderQr(verifyUrl));
-                contentStream.drawImage(qrImage, MARGIN_X, y - 20 - QR_SIZE, QR_SIZE, QR_SIZE);
-
-                contentStream.beginText();
-                contentStream.setFont(font, 9);
-                contentStream.newLineAtOffset(MARGIN_X + QR_SIZE + 12, y - 20 - QR_SIZE / 2);
-                contentStream.showText("QR 또는 아래 링크로 진위를 확인할 수 있습니다.");
-                contentStream.endText();
+            var lines = new java.util.ArrayList<Map.Entry<String, String>>();
+            for (var row : rows) {
+                var keys = wrap(font, row.getKey(), 145f);
+                var values = wrap(font, row.getValue(), 310f);
+                for (int i = 0; i < Math.max(keys.size(), values.size()); i++)
+                    lines.add(Map.entry(i < keys.size() ? keys.get(i) : "", i < values.size() ? values.get(i) : ""));
             }
-
+            int pageCount = Math.max(1, (lines.size() + 23) / 24);
+            PDImageXObject qrImage = LosslessFactory.createFromImage(document, renderQr(verifyUrl));
+            for (int pageIndex = 0; pageIndex < pageCount; pageIndex++) {
+                PDPage page = new PDPage(PDRectangle.A4);
+                document.addPage(page);
+                try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
+                    text(stream, font, 22, MARGIN_X, TITLE_Y, title);
+                    float y = ROW_START_Y;
+                    for (int i = pageIndex * 24; i < Math.min(lines.size(), (pageIndex + 1) * 24); i++) {
+                        text(stream, font, 12, MARGIN_X, y, lines.get(i).getKey());
+                        text(stream, font, 12, MARGIN_X + 160, y, lines.get(i).getValue());
+                        y -= 18;
+                    }
+                    text(stream, font, 11, MARGIN_X, 195, "발급일: " + issuedAt.format(ISSUED_AT_FORMAT));
+                    stream.drawImage(qrImage, MARGIN_X, 65, QR_SIZE, QR_SIZE);
+                    text(stream, font, 9, MARGIN_X + QR_SIZE + 12, 120, "QR로 증명서의 진위를 확인할 수 있습니다.");
+                    text(stream, font, 9, 490, 40, (pageIndex + 1) + " / " + pageCount);
+                }
+            }
             ByteArrayOutputStream output = new ByteArrayOutputStream();
             document.save(output);
             return output.toByteArray();
         } catch (IOException e) {
             throw new IllegalStateException("증명서 PDF 생성에 실패했습니다.", e);
         }
+    }
+
+    private void text(PDPageContentStream stream, PDType0Font font, int size, float x, float y, String value) throws IOException {
+        stream.beginText(); stream.setFont(font, size); stream.newLineAtOffset(x, y);
+        stream.showText(value); stream.endText();
+    }
+
+    private List<String> wrap(PDType0Font font, String value, float width) throws IOException {
+        var lines = new java.util.ArrayList<String>();
+        StringBuilder line = new StringBuilder();
+        for (int cp : (value == null ? "-" : value).codePoints().toArray()) {
+            String character = Character.isISOControl(cp) ? " " : new String(Character.toChars(cp));
+            if (!line.isEmpty() && font.getStringWidth(line.toString() + character) / 1000 * 12 > width) {
+                lines.add(line.toString()); line.setLength(0);
+            }
+            line.append(character);
+        }
+        lines.add(line.toString());
+        return lines;
     }
 
     private BufferedImage renderQr(String content) {

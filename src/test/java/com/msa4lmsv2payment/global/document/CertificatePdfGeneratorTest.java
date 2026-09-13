@@ -30,4 +30,15 @@ class CertificatePdfGeneratorTest {
             assertThat(document.getNumberOfPages()).isEqualTo(1);
         }
     }
+    @Test
+    void 긴_강의명이_있는_대량_이력도_모두_출력한다() throws Exception {
+        var rows = new java.util.ArrayList<java.util.Map.Entry<String,String>>();
+        for (int i = 0; i < 80; i++) rows.add(java.util.Map.entry("강의 " + i, "매우 긴 강의명 ".repeat(8) + "끝" + i));
+        byte[] bytes = new CertificatePdfGenerator().generate("강 의 경 력 증 명 서", rows,
+                "https://example.com/verify", LocalDateTime.of(2026,9,13,0,0));
+        try (PDDocument document = PDDocument.load(bytes)) {
+            assertThat(document.getNumberOfPages()).isGreaterThan(1);
+            assertThat(new PDFTextStripper().getText(document)).contains("끝0", "끝79", "2026년 09월 13일");
+        }
+    }
 }
