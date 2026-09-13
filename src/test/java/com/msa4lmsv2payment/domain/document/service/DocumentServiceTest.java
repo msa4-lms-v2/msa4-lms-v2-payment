@@ -11,6 +11,10 @@ import com.msa4lmsv2payment.domain.payment.service.PaymentService;
 import com.msa4lmsv2payment.domain.tuitionbill.service.TuitionBillService;
 import com.msa4lmsv2payment.global.audit.AuditLogRecorder;
 import com.msa4lmsv2payment.global.client.AcademicResyncClient;
+import com.msa4lmsv2payment.global.client.ProfessorCareerResponse;
+import com.msa4lmsv2payment.global.client.ProfessorCertificateEligibilityResponse;
+import com.msa4lmsv2payment.global.error.CertificateNotEligibleException;
+import java.util.List;
 import com.msa4lmsv2payment.global.document.CertificatePdfGenerator;
 import com.msa4lmsv2payment.global.error.DocumentAlreadyRevokedException;
 import com.msa4lmsv2payment.global.error.DocumentNotFoundException;
@@ -35,6 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -56,6 +61,7 @@ class DocumentServiceTest {
     @Mock AcademicResyncClient academicResyncClient;
     @Mock FileStorageService fileStorageService;
     @Mock CertificatePdfGenerator pdfGenerator;
+    @Mock com.msa4lmsv2payment.global.client.ProfessorCertificateClient professorCertificateClient;
 
     private DocumentService service;
 
@@ -64,7 +70,7 @@ class DocumentServiceTest {
         lenient().when(transactionManager.getTransaction(any())).thenReturn(transactionStatus);
         service = new DocumentService(documentRepository, documentVerificationRepository,
                 tuitionBillService, paymentService, auditLogRecorder, transactionManager,
-                academicResyncClient, fileStorageService, pdfGenerator,
+                academicResyncClient, fileStorageService, pdfGenerator, professorCertificateClient,
                 SIGNING_KEY, "http://localhost:5176");
     }
 
@@ -152,6 +158,59 @@ class DocumentServiceTest {
 
         verify(auditLogRecorder).record(any(), any(), any(), any(), any(), any());
         assertTrue(document.isRevoked());
+    }
+
+    private ProfessorCareerResponse career(List<ProfessorCareerResponse.Teaching> lectures) {
+        return new ProfessorCareerResponse(7L, new ProfessorCertificateEligibilityResponse(8L, "P-TEST", "테스트 교수",
+                "학과", "대학", (short)2020, "ACTIVE"), lectures);
+    }
+
+    @Test
+    void 강의_이력이_없으면_PDF와_문서를_만들지_않는다() {
+        var user = new CurrentUser(7L, "PROFESSOR");
+        when(professorCertificateClient.fetch(user)).thenReturn(career(List.of()));
+        assertThrows(CertificateNotEligibleException.class, () -> service.issueCareerCertificate(user, true));
+        verify(documentRepository, never()).save(any());
+        verify(pdfGenerator, never()).generate(any(), any(), any(), any());
+    }
+
+    @Test
+    void 경력증명서는_등록된_본인_교수번호로_저장한다() {
+        var user = new CurrentUser(7L, "PROFESSOR");
+        when(professorCertificateClient.fetch(user)).thenReturn(career(List.of()));
+        when(pdfGenerator.generate(any(), any(), any(), any())).thenReturn(new byte[]{1});
+        when(fileStorageService.upload(any(), any(), any(), any())).thenReturn("certificates/career/test.pdf");
+        when(documentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        var result = service.issueCareerCertificate(user, false);
+        assertEquals(DocumentType.CAREER, result.documentType());
+        var captor = org.mockito.ArgumentCaptor.forClass(Document.class);
+        verify(documentRepository).save(captor.capture());
+        assertEquals(8L, captor.getValue().getProfessorId());
+        assertEquals(null, captor.getValue().getStudentId());
+    }
+
+    @Test
+    void 다른_교수가_발급한_문서는_다운로드할_수_없다() {
+        var user = new CurrentUser(7L, "PROFESSOR");
+        when(professorCertificateClient.fetch(user)).thenReturn(career(List.of()));
+        when(documentRepository.findById(1L)).thenReturn(Optional.of(
+                new Document(null, 99L, DocumentType.CAREER, TOKEN, "hash", "test.pdf")));
+        assertThrows(CertificateNotEligibleException.class, () -> service.getCertificateDownloadUrl(user, 1L));
+        verify(fileStorageService, never()).presignedDownloadUrl(any());
+    }
+
+    @Test
+    void 강의경력은_별도_문서유형과_실제_강의기간으로_발급한다() {
+        var user = new CurrentUser(7L, "PROFESSOR");
+        var lecture = new ProfessorCareerResponse.Teaching(10L, (short)2025, "FIRST", "CS101", "자료구조", "01",
+                (byte)3, java.time.LocalDate.of(2025, 3, 1), java.time.LocalDate.of(2025, 6, 30));
+        when(professorCertificateClient.fetch(user)).thenReturn(career(List.of(lecture)));
+        when(pdfGenerator.generate(any(), any(), any(), any())).thenReturn(new byte[]{1});
+        when(fileStorageService.upload(any(), any(), any(), any())).thenReturn("certificates/lecture.pdf");
+        when(documentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        assertEquals(DocumentType.LECTURE_CAREER, service.issueCareerCertificate(user, true).documentType());
+        verify(pdfGenerator).generate(any(), argThat(rows -> rows.stream().anyMatch(row ->
+                row.getValue().equals("2025-03-01 ~ 2025-06-30"))), any(), any());
     }
 
     private CurrentUser admin() {

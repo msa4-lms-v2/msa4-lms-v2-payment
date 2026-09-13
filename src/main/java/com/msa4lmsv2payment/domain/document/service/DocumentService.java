@@ -65,6 +65,7 @@ public class DocumentService {
     private final AcademicResyncClient academicResyncClient;
     private final FileStorageService fileStorageService;
     private final CertificatePdfGenerator pdfGenerator;
+    private final com.msa4lmsv2payment.global.client.ProfessorCertificateClient professorCertificateClient;
     private final String signingKey;
     private final String clientBaseUrl;
 
@@ -72,6 +73,7 @@ public class DocumentService {
                             TuitionBillService tuitionBillService, PaymentService paymentService, AuditLogRecorder auditLogRecorder,
                             PlatformTransactionManager transactionManager, AcademicResyncClient academicResyncClient,
                             FileStorageService fileStorageService, CertificatePdfGenerator pdfGenerator,
+                            com.msa4lmsv2payment.global.client.ProfessorCertificateClient professorCertificateClient,
                             @Value("${certificate.signing-key}") String signingKey,
                             @Value("${certificate.client-base-url}") String clientBaseUrl) {
         this.documentRepository = documentRepository;
@@ -84,6 +86,7 @@ public class DocumentService {
         this.academicResyncClient = academicResyncClient;
         this.fileStorageService = fileStorageService;
         this.pdfGenerator = pdfGenerator;
+        this.professorCertificateClient = professorCertificateClient;
         this.signingKey = signingKey;
         this.clientBaseUrl = clientBaseUrl;
     }
@@ -146,9 +149,7 @@ public class DocumentService {
     // 교수 재직증명서 - 재직 상태(ACTIVE)인 교수만 발급할 수 있다.
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public DocumentResponseDTO issueEmploymentCertificate(CurrentUser currentUser) {
-        ProfessorCertificateEligibilityResponse eligibility = academicResyncClient
-                .fetchProfessorCertificateEligibilityByUserId(currentUser.id())
-                .orElseThrow(() -> new AcademicResourceNotFoundException("교수 정보를 확인할 수 없습니다."));
+        ProfessorCertificateEligibilityResponse eligibility = professorCertificateClient.fetch(currentUser).professor();
 
         if (!"ACTIVE".equals(eligibility.status())) {
             throw new CertificateNotEligibleException("재직 중인 교수만 재직증명서를 발급할 수 있습니다.");
@@ -164,6 +165,32 @@ public class DocumentService {
         );
 
         return issue(null, eligibility.professorId(), DocumentType.EMPLOYMENT, "재 직 증 명 서", rows);
+    }
+
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public DocumentResponseDTO issueCareerCertificate(CurrentUser user, boolean teaching) {
+        var career = professorCertificateClient.fetch(user);
+        var professor = career.professor();
+        if (professor.hireYear() == null || professor.hireYear() > java.time.Year.now().getValue())
+            throw new CertificateNotEligibleException("임용연도를 확인할 수 없어 경력증명서를 발급할 수 없습니다.");
+        List<Map.Entry<String, String>> rows = new ArrayList<>(List.of(
+                entry("성명", professor.name()), entry("교번", professor.professorNumber()),
+                entry("학과", professor.departmentName()), entry("단과대학", professor.collegeName()),
+                entry("임용연도", professor.hireYear() + "년"),
+                entry("등록 상태", "ACTIVE".equals(professor.status()) ? "재직" : "비활성")));
+        if (teaching) {
+            if (career.lectures() == null || career.lectures().isEmpty())
+                throw new CertificateNotEligibleException("종료된 담당 강의가 없어 강의경력증명서를 발급할 수 없습니다.");
+            for (var lecture : career.lectures()) {
+                rows.add(entry(lecture.academicYear() + "학년도 " + ("FIRST".equals(lecture.term()) ? "1" : "2") + "학기",
+                        lecture.courseName() + " (" + lecture.courseCode() + ", " + lecture.sectionNo() + "분반, " + lecture.credits() + "학점)"));
+                rows.add(entry("강의 기간", lecture.startDate() + " ~ " + lecture.endDate()));
+            }
+        } else {
+            rows.add(entry("확인 범위", "본교에 등록된 임용연도 및 현재 소속 정보"));
+        }
+        return issue(null, professor.professorId(), teaching ? DocumentType.LECTURE_CAREER : DocumentType.CAREER,
+                teaching ? "강 의 경 력 증 명 서" : "경 력 증 명 서", rows);
     }
 
     // 세 발급 메서드가 공유하는 "토큰 발급 -> PDF 생성 -> MinIO 업로드 -> Document 저장" 공통 흐름.
@@ -205,10 +232,7 @@ public class DocumentService {
             return document.getStudentId().equals(tuitionBillService.resolveStudentId(currentUser));
         }
         if ("PROFESSOR".equals(currentUser.role()) && document.getProfessorId() != null) {
-            return academicResyncClient.fetchProfessorCertificateEligibilityByUserId(currentUser.id())
-                    .map(ProfessorCertificateEligibilityResponse::professorId)
-                    .map(document.getProfessorId()::equals)
-                    .orElse(false);
+            return document.getProfessorId().equals(professorCertificateClient.fetch(currentUser).professor().professorId());
         }
         return false;
     }

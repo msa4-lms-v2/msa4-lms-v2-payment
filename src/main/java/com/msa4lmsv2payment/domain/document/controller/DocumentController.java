@@ -76,6 +76,22 @@ public class DocumentController {
         return GlobalResponseDTO.success(documentService.issueEmploymentCertificate(currentUser));
     }
 
+    @Operation(summary = "교수 경력증명서 발급", description = "로그인한 교수의 등록 임용연도와 소속을 확인하여 발급한다.")
+    @PreAuthorize("hasRole('PROFESSOR')")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PostMapping("/api/payment/career-certificates")
+    public GlobalResponseDTO<DocumentResponseDTO> issueCareerCertificate(@AuthenticationPrincipal CurrentUser user) {
+        return GlobalResponseDTO.success(documentService.issueCareerCertificate(user, false));
+    }
+
+    @Operation(summary = "교수 강의경력증명서 발급", description = "종료된 담당 강의만 기재하며 강의 이력이 없으면 발급하지 않는다.")
+    @PreAuthorize("hasRole('PROFESSOR')")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PostMapping("/api/payment/lecture-career-certificates")
+    public GlobalResponseDTO<DocumentResponseDTO> issueLectureCareerCertificate(@AuthenticationPrincipal CurrentUser user) {
+        return GlobalResponseDTO.success(documentService.issueCareerCertificate(user, true));
+    }
+
     @Operation(summary = "증명서 PDF 다운로드", description = "MinIO에 저장된 증명서 PDF의 만료 1일짜리 다운로드 URL로 302 리다이렉트한다. 발급받은 본인 또는 ADMIN만 가능.")
     @ApiResponse(responseCode = "302", description = "다운로드 URL로 리다이렉트")
     @CustomApiResponse({CustomResponseCode.ACCESS_DENIED, CustomResponseCode.NOT_FOUND_DATA})

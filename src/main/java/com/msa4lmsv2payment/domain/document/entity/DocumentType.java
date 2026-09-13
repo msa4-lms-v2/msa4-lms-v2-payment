@@ -5,5 +5,7 @@ public enum DocumentType {
     GRADUATION,
     GRADE,
     EMPLOYMENT,
+    CAREER,
+    LECTURE_CAREER,
     PAYMENT_CERTIFICATE
 }

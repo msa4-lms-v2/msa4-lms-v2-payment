@@ -21,7 +21,7 @@ pipeline {
 
         stage('Update Manifest') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'msa4-team3', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
+                withCredentials([usernamePassword(credentialsId: 'jenkins-msa4-lms-v2-manifests', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
                     retry(5) {
                         sh """
                             rm -rf k8s-manifests
