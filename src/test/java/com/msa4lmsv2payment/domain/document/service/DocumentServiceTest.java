@@ -10,9 +10,12 @@ import com.msa4lmsv2payment.domain.document.response.CertificateVerificationResp
 import com.msa4lmsv2payment.domain.payment.service.PaymentService;
 import com.msa4lmsv2payment.domain.tuitionbill.service.TuitionBillService;
 import com.msa4lmsv2payment.global.audit.AuditLogRecorder;
+import com.msa4lmsv2payment.global.client.AcademicResyncClient;
+import com.msa4lmsv2payment.global.document.CertificatePdfGenerator;
 import com.msa4lmsv2payment.global.error.DocumentAlreadyRevokedException;
 import com.msa4lmsv2payment.global.error.DocumentNotFoundException;
 import com.msa4lmsv2payment.global.error.DocumentSignatureMismatchException;
+import com.msa4lmsv2payment.global.file.FileStorageService;
 import com.msa4lmsv2payment.global.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,9 +26,10 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionStatus;
 
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.Optional;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -40,6 +44,7 @@ import static org.mockito.Mockito.when;
 class DocumentServiceTest {
 
     private static final String TOKEN = "11111111-1111-1111-1111-111111111111";
+    private static final String SIGNING_KEY = "test-signing-key";
 
     @Mock DocumentRepository documentRepository;
     @Mock DocumentVerificationRepository documentVerificationRepository;
@@ -48,6 +53,9 @@ class DocumentServiceTest {
     @Mock AuditLogRecorder auditLogRecorder;
     @Mock PlatformTransactionManager transactionManager;
     @Mock TransactionStatus transactionStatus;
+    @Mock AcademicResyncClient academicResyncClient;
+    @Mock FileStorageService fileStorageService;
+    @Mock CertificatePdfGenerator pdfGenerator;
 
     private DocumentService service;
 
@@ -55,12 +63,16 @@ class DocumentServiceTest {
     void setUp() {
         lenient().when(transactionManager.getTransaction(any())).thenReturn(transactionStatus);
         service = new DocumentService(documentRepository, documentVerificationRepository,
-                tuitionBillService, paymentService, auditLogRecorder, transactionManager);
+                tuitionBillService, paymentService, auditLogRecorder, transactionManager,
+                academicResyncClient, fileStorageService, pdfGenerator,
+                SIGNING_KEY, "http://localhost:5176");
     }
 
-    private String sha256(String value) throws Exception {
-        MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
+    // DocumentService.hmacSign()과 동일한 알고리즘·키로 계산해 테스트에서 재사용한다.
+    private String hmacSign(String value) throws Exception {
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(new SecretKeySpec(SIGNING_KEY.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+        return HexFormat.of().formatHex(mac.doFinal(value.getBytes(StandardCharsets.UTF_8)));
     }
 
     @Test
@@ -95,7 +107,7 @@ class DocumentServiceTest {
 
     @Test
     void qrHash가_토큰_해시와_다르면_서명불일치로_거부하고_위변조_시도를_기록한다() throws Exception {
-        Document document = new Document(1L, null, DocumentType.PAYMENT_CERTIFICATE, TOKEN, sha256(TOKEN));
+        Document document = new Document(1L, null, DocumentType.PAYMENT_CERTIFICATE, TOKEN, hmacSign(TOKEN));
         when(documentRepository.findByVerificationToken(TOKEN)).thenReturn(Optional.of(document));
 
         assertThrows(DocumentSignatureMismatchException.class,
@@ -105,10 +117,10 @@ class DocumentServiceTest {
 
     @Test
     void qrHash가_토큰_해시와_일치하면_통과한다() throws Exception {
-        Document document = new Document(1L, null, DocumentType.PAYMENT_CERTIFICATE, TOKEN, sha256(TOKEN));
+        Document document = new Document(1L, null, DocumentType.PAYMENT_CERTIFICATE, TOKEN, hmacSign(TOKEN));
         when(documentRepository.findByVerificationToken(TOKEN)).thenReturn(Optional.of(document));
 
-        CertificateVerificationResponseDTO response = service.verifyCertificate(TOKEN, sha256(TOKEN), "127.0.0.1");
+        CertificateVerificationResponseDTO response = service.verifyCertificate(TOKEN, hmacSign(TOKEN), "127.0.0.1");
 
         assertEquals(DocumentVerificationResult.VALID, response.result());
     }

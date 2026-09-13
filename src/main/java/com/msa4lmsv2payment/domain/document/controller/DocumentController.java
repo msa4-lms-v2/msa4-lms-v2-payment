@@ -1,5 +1,6 @@
 package com.msa4lmsv2payment.domain.document.controller;
 
+import com.msa4lmsv2payment.domain.document.request.AcademicCertificateRequestDTO;
 import com.msa4lmsv2payment.domain.document.request.DocumentRevokeRequestDTO;
 import com.msa4lmsv2payment.domain.document.request.PaymentReceiptRequestDTO;
 import com.msa4lmsv2payment.domain.document.response.CertificateVerificationResponseDTO;
@@ -15,8 +16,10 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import java.net.URI;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -46,6 +49,44 @@ public class DocumentController {
             @RequestBody @Valid PaymentReceiptRequestDTO request
     ) {
         return GlobalResponseDTO.success(documentService.issuePaymentReceipt(currentUser, request));
+    }
+
+    @Operation(summary = "학생 재학/졸업증명서 발급", description = "재학증명서는 재학 상태, 졸업증명서는 Academic의 졸업요건 충족 여부를 확인한 뒤에만 발급한다. STUDENT 본인만 가능.")
+    @ApiResponse(responseCode = "201", description = "발급 성공")
+    @CustomApiResponse({CustomResponseCode.INVALID_PARAMETER, CustomResponseCode.ACCESS_DENIED, CustomResponseCode.NOT_FOUND_DATA})
+    @PreAuthorize("hasRole('STUDENT')")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PostMapping("/api/payment/certificates")
+    public GlobalResponseDTO<DocumentResponseDTO> issueAcademicCertificate(
+            @AuthenticationPrincipal CurrentUser currentUser,
+            @RequestBody @Valid AcademicCertificateRequestDTO request
+    ) {
+        return GlobalResponseDTO.success(documentService.issueAcademicCertificate(currentUser, request));
+    }
+
+    @Operation(summary = "교수 재직증명서 발급", description = "재직 상태(ACTIVE)인 교수만 발급할 수 있다. PROFESSOR 본인만 가능.")
+    @ApiResponse(responseCode = "201", description = "발급 성공")
+    @CustomApiResponse({CustomResponseCode.INVALID_PARAMETER, CustomResponseCode.ACCESS_DENIED, CustomResponseCode.NOT_FOUND_DATA})
+    @PreAuthorize("hasRole('PROFESSOR')")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PostMapping("/api/payment/employment-certificates")
+    public GlobalResponseDTO<DocumentResponseDTO> issueEmploymentCertificate(
+            @AuthenticationPrincipal CurrentUser currentUser
+    ) {
+        return GlobalResponseDTO.success(documentService.issueEmploymentCertificate(currentUser));
+    }
+
+    @Operation(summary = "증명서 PDF 다운로드", description = "MinIO에 저장된 증명서 PDF의 만료 1일짜리 다운로드 URL로 302 리다이렉트한다. 발급받은 본인 또는 ADMIN만 가능.")
+    @ApiResponse(responseCode = "302", description = "다운로드 URL로 리다이렉트")
+    @CustomApiResponse({CustomResponseCode.ACCESS_DENIED, CustomResponseCode.NOT_FOUND_DATA})
+    @PreAuthorize("hasAnyRole('STUDENT', 'PROFESSOR', 'ADMIN')")
+    @GetMapping("/api/payment/certificates/{documentId}/download")
+    public ResponseEntity<Void> downloadCertificate(
+            @AuthenticationPrincipal CurrentUser currentUser,
+            @PathVariable Long documentId
+    ) {
+        String downloadUrl = documentService.getCertificateDownloadUrl(currentUser, documentId);
+        return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(downloadUrl)).build();
     }
 
     @Operation(summary = "증명서 진위확인", description = """

@@ -52,11 +52,17 @@ public class Document {
     private LocalDateTime createdAt;
 
     public Document(Long studentId, Long professorId, DocumentType documentType, String verificationToken, String qrHash) {
+        this(studentId, professorId, documentType, verificationToken, qrHash, null);
+    }
+
+    public Document(Long studentId, Long professorId, DocumentType documentType, String verificationToken,
+                     String qrHash, String filePath) {
         this.studentId = studentId;
         this.professorId = professorId;
         this.documentType = documentType;
         this.verificationToken = verificationToken;
         this.qrHash = qrHash;
+        this.filePath = filePath;
     }
 
     public boolean isRevoked() {
