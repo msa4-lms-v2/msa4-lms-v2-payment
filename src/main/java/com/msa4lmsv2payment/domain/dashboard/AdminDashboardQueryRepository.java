@@ -14,21 +14,36 @@ import static com.msa4lmsv2payment.domain.dashboard.AdminDashboardResponse.*;
 public class AdminDashboardQueryRepository {
     private final NamedParameterJdbcTemplate jdbc;
 
-    public Summary summary() {
-        Long count = jdbc.queryForObject("select count(*) from installment_plans where status = 'REQUESTED'",
-                Map.of(), Long.class);
-        // Certificates are issued synchronously by DocumentService; no approval queue exists.
-        return new Summary(count == null ? 0 : count, 0);
+    public Summary summary(long semesterId) {
+        return jdbc.queryForObject("""
+            select (select count(*) from installment_plans p
+                    join tuition_bills b on b.id = p.tuition_bill_id
+                    where p.status = 'REQUESTED' and b.semester_id = :semesterId) installment_pending,
+                   (select count(*) from scholarship_applications a
+                    join tuition_bills b on b.id = a.tuition_bill_id
+                    where a.status = 'REQUESTED' and b.semester_id = :semesterId) scholarship_pending
+            """, Map.of("semesterId", semesterId), (rs, row) -> new Summary(
+                rs.getLong("installment_pending"), rs.getLong("scholarship_pending")));
     }
 
-    public List<Task> tasks() {
+    public List<Task> tasks(long semesterId) {
         return jdbc.query("""
-            select p.id, p.tuition_bill_id, p.created_at,
-                   coalesce(s.display_name, concat('학생 #', b.student_id)) requester_name
-            from installment_plans p join tuition_bills b on b.id = p.tuition_bill_id
-            left join student_snapshots s on s.student_id = b.student_id
-            where p.status = 'REQUESTED' order by p.created_at, p.id limit 30
-            """, Map.of(), (rs, row) -> new Task(rs.getLong("id"), "INSTALLMENT",
+            select pending.id, pending.type, pending.tuition_bill_id, pending.created_at,
+                   coalesce(s.display_name, concat('학생 #', pending.student_id)) requester_name
+            from (
+                select p.id, 'INSTALLMENT' type, p.tuition_bill_id, b.student_id, p.created_at
+                from installment_plans p
+                join tuition_bills b on b.id = p.tuition_bill_id
+                where p.status = 'REQUESTED' and b.semester_id = :semesterId
+                union all
+                select a.id, 'SCHOLARSHIP' type, a.tuition_bill_id, a.student_id, a.created_at
+                from scholarship_applications a
+                join tuition_bills b on b.id = a.tuition_bill_id
+                where a.status = 'REQUESTED' and b.semester_id = :semesterId
+            ) pending
+            left join student_snapshots s on s.student_id = pending.student_id
+            order by pending.created_at, pending.type, pending.id limit 30
+            """, Map.of("semesterId", semesterId), (rs, row) -> new Task(rs.getLong("id"), rs.getString("type"),
                 rs.getString("requester_name"), rs.getTimestamp("created_at").toLocalDateTime(),
                 rs.getLong("tuition_bill_id")));
     }
