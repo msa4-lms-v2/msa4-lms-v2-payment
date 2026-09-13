@@ -99,3 +99,7 @@ management:
 logging:
   level:
     com.msa4lmsv2payment: debug
+
+academic:
+  internal:
+    base-url: ${ACADEMIC_INTERNAL_BASE_URL:http://localhost:8082}
