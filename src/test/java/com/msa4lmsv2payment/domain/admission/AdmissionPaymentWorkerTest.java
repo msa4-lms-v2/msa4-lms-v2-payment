@@ -30,7 +30,7 @@ class AdmissionPaymentWorkerTest {
     void paidAccount() {
         bill.changeStatus(TuitionBillStatus.PAID);
         var a=new VirtualAccount(100L,"ADMISSION-100","secret","account","88",LocalDateTime.now().plusDays(7),VirtualAccountStatus.DEPOSITED);
-        a.assignPaymentKey("pk");when(accounts.findByTuitionBillId(100L)).thenReturn(Optional.of(a));
+        a.assignPaymentKey("pk");when(accounts.findByOrderId("ADMISSION-100")).thenReturn(Optional.of(a));
     }
     @Test void unpaidAndPartialNeverRequestAccountCreation() {
         worker.synchronizeBill(100L);bill.changeStatus(TuitionBillStatus.PARTIAL);worker.synchronizeBill(100L);

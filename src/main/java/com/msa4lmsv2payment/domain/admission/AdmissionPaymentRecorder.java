@@ -20,6 +20,7 @@ public class AdmissionPaymentRecorder {
     private final VirtualAccountRepository accounts; private final VirtualAccountRecorderService accountRecorder;
     private final PaymentRepository payments;
     private final com.msa4lmsv2payment.domain.refund.service.RefundRecorderService refundRecorder;
+    private final com.msa4lmsv2payment.domain.virtualaccount.repository.VirtualAccountDepositRepository deposits;
     public TuitionBill reserve(Long candidateId,String name,Long adminId,AdmissionBillRequest request) {
         var found=bills.findByAdmissionCandidateId(candidateId);
         if(found.isPresent()) {
@@ -33,12 +34,37 @@ public class AdmissionPaymentRecorder {
     }
     public VirtualAccount issued(Long billId,String orderId,TossVirtualAccountIssueResponse r,Long adminId) {
         var b=bills.findByIdForUpdate(billId).orElseThrow();
+        if (!b.currentAdmissionOrderId().equals(orderId)) throw new AdmissionPaymentConflictException("더 최신 발급 요청이 존재합니다.");
         var existing=accounts.findByOrderId(orderId);if(existing.isPresent())return existing.get();
         if(r==null || r.virtualAccount()==null || r.paymentKey()==null || r.secret()==null)throw new IllegalStateException("가상계좌 발급 응답 확인 필요");
         LocalDateTime expiry=OffsetDateTime.parse(r.virtualAccount().dueDate()).atZoneSameInstant(ZoneId.of("Asia/Seoul")).toLocalDateTime();
-        var a=new VirtualAccount(billId,orderId,r.secret(),r.virtualAccount().accountNumber(),r.virtualAccount().bankCode(),expiry,VirtualAccountStatus.ISSUED);
+        var a=new VirtualAccount(billId,orderId,r.secret(),r.virtualAccount().accountNumber(),r.virtualAccount().bankCode(),expiry,
+                expiry.isAfter(LocalDateTime.now()) ? VirtualAccountStatus.ISSUED : VirtualAccountStatus.EXPIRED);
         b.resumeAdmissionSync();
         a.assignPaymentKey(r.paymentKey());return accountRecorder.saveWithAudit(adminId,a);
+    }
+    public TuitionBill prepareReissue(Long billId, AdmissionReissueRequest request) {
+        var bill = bills.findByIdForUpdate(billId).orElseThrow();
+        if (bill.getStatus()==TuitionBillStatus.PAID || bill.getStatus()==TuitionBillStatus.PARTIAL || bill.getStudentId()!=null) {
+            throw new AdmissionPaymentConflictException("납부 처리 중이거나 완료된 고지는 재발급할 수 없습니다.");
+        }
+        var previous = accounts.findById(request.previousVirtualAccountId()).orElseThrow();
+        if (!billId.equals(previous.getTuitionBillId())) throw new AdmissionPaymentConflictException("고지와 이전 계좌가 일치하지 않습니다.");
+        String nextOrder = "ADMISSION-" + billId + "-R" + previous.getId();
+        if (nextOrder.equals(bill.currentAdmissionOrderId())) {
+            if (!bill.getDueDate().equals(request.dueDate())) throw new AdmissionPaymentConflictException("진행 중인 재발급 기한과 일치해야 합니다.");
+            return bill;
+        }
+        if (!previous.getOrderId().equals(bill.currentAdmissionOrderId()) || bill.getStatus()==TuitionBillStatus.PAID
+                || request.dueDate().isBefore(LocalDate.now())
+                || bill.getStatus()==TuitionBillStatus.PARTIAL || bill.getStudentId()!=null
+                || previous.getExpiresAt().isAfter(LocalDateTime.now()) || previous.getStatus()==VirtualAccountStatus.DEPOSITED
+                || !deposits.findByVirtualAccountId(previous.getId()).isEmpty()) {
+            throw new AdmissionPaymentConflictException("미입금 상태의 현재 만료 계좌만 재발급할 수 있습니다. 입금 내역이 있으면 환불 확인이 필요합니다.");
+        }
+        previous.expire();
+        bill.prepareAdmissionReissue(nextOrder, request.dueDate());
+        return bill;
     }
     public void synced(Long billId,Long studentId) {
         var b=bills.findByIdForUpdate(billId).orElseThrow();
@@ -49,7 +75,7 @@ public class AdmissionPaymentRecorder {
     public void cancelled(Long billId) {
         var b=bills.findByIdForUpdate(billId).orElseThrow();
         if(b.isAdmissionSyncComplete())return;
-        var va=accounts.findByTuitionBillId(billId).orElse(null);
+        var va=accounts.findByOrderId(b.currentAdmissionOrderId()).orElse(null);
         if(va!=null) {
             if(b.getStatus()==TuitionBillStatus.PAID) {
                 var refund=new com.msa4lmsv2payment.domain.refund.entity.Refund(billId,

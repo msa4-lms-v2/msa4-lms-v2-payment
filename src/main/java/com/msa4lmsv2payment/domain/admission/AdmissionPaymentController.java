@@ -12,4 +12,9 @@ public class AdmissionPaymentController {
     private final AdmissionPaymentService service;
     @GetMapping public GlobalResponseDTO<AdmissionPaymentService.Detail> get(@PathVariable Long candidateId){return GlobalResponseDTO.success(service.get(candidateId));}
     @PostMapping public GlobalResponseDTO<AdmissionPaymentService.Detail> issue(@PathVariable Long candidateId,@Valid @RequestBody AdmissionBillRequest request,@AuthenticationPrincipal CurrentUser user){return GlobalResponseDTO.success(service.issue(candidateId,request,user));}
+    @PostMapping("/reissue")
+    public GlobalResponseDTO<AdmissionPaymentService.Detail> reissue(@PathVariable Long candidateId,
+            @Valid @RequestBody AdmissionReissueRequest request, @AuthenticationPrincipal CurrentUser user) {
+        return GlobalResponseDTO.success(service.reissue(candidateId, request, user));
+    }
 }

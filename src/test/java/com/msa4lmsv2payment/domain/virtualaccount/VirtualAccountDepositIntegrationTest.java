@@ -81,6 +81,53 @@ class VirtualAccountDepositIntegrationTest {
     private com.msa4lmsv2payment.domain.admission.AdmissionPaymentRecorder admissionRecorder;
 
     @Test
+    void reissuePreservesOldAccountAndRefundsItsLateDeposit() throws Exception {
+        TuitionBill bill = new TuitionBill(null, 1L, BigDecimal.valueOf(10000),
+                LocalDate.now().minusDays(1), TuitionBillStatus.UNPAID, 1L);
+        bill.admission(70003L, "재발급 테스트", "88");
+        bill = tuitionBillRepository.save(bill);
+        Long billId = bill.getId();
+        String accountNumber = "reissue-" + UUID.randomUUID().toString().substring(0, 12);
+        VirtualAccount old = new VirtualAccount(billId, "ADMISSION-" + billId, "old-secret", accountNumber, "88",
+                LocalDateTime.now().minusHours(1), VirtualAccountStatus.ISSUED);
+        old.assignPaymentKey("old-pk-" + billId);
+        old = virtualAccountRepository.save(old);
+        Long oldId = old.getId();
+        var request = new com.msa4lmsv2payment.domain.admission.AdmissionReissueRequest(oldId, LocalDate.now().plusDays(7));
+        String nextOrder;
+        try (var executor = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+            var first = executor.submit(() -> admissionRecorder.prepareReissue(billId, request).currentAdmissionOrderId());
+            var second = executor.submit(() -> admissionRecorder.prepareReissue(billId, request).currentAdmissionOrderId());
+            nextOrder = first.get();
+            assertThat(second.get()).isEqualTo(nextOrder);
+        }
+        var issued = new com.msa4lmsv2payment.global.client.TossVirtualAccountIssueResponse("new-pk-" + billId, "new-secret",
+                new com.msa4lmsv2payment.global.client.TossVirtualAccountIssueResponse.VirtualAccountInfo(
+                        accountNumber, "88", request.dueDate().atTime(23,59,59).atOffset(java.time.ZoneOffset.ofHours(9)).toString()));
+        var current = admissionRecorder.issued(billId, nextOrder, issued, 1L);
+        assertThat(admissionRecorder.issued(billId, nextOrder, issued, 1L).getId()).isEqualTo(current.getId());
+        assertThat(virtualAccountRepository.findById(oldId).orElseThrow().getStatus()).isEqualTo(VirtualAccountStatus.EXPIRED);
+        assertThat(current.getAccountNumber()).isEqualTo(old.getAccountNumber());
+        when(tossPaymentsClient.getPaymentByOrderId(old.getOrderId()))
+                .thenReturn(new TossPaymentResponse(old.getPaymentKey(), old.getOrderId(), "DONE", 10000L));
+        var late = new TossVirtualAccountDepositWebhookRequest("old-secret", "DONE", "old-tx-" + billId, old.getOrderId(), java.time.Instant.now().toString());
+        virtualAccountDepositService.processDeposit("old-event-" + billId, java.time.Instant.now().toString(), late);
+        virtualAccountDepositService.processDeposit("old-event-retry-" + billId, java.time.Instant.now().toString(), late);
+        assertThat(paymentRepository.findByTuitionBillId(billId)).isEmpty();
+        assertThat(tuitionBillRepository.findById(billId).orElseThrow().getStatus()).isEqualTo(TuitionBillStatus.UNPAID);
+        assertThat(refundRepository.findByTuitionBillIdAndRefundType(billId, RefundType.EXCESS_DEPOSIT)).hasValueSatisfying(refund -> {
+            assertThat(refund.getVirtualAccountId()).isEqualTo(oldId);
+            assertThat(refund.getAmount()).isEqualByComparingTo("10000");
+        });
+        when(tossPaymentsClient.getPaymentByOrderId(nextOrder))
+                .thenReturn(new TossPaymentResponse(current.getPaymentKey(), nextOrder, "DONE", 10000L));
+        virtualAccountDepositService.processDeposit("new-event-" + billId, java.time.Instant.now().toString(),
+                new TossVirtualAccountDepositWebhookRequest("new-secret", "DONE", "new-tx-" + billId, nextOrder, java.time.Instant.now().toString()));
+        assertThat(tuitionBillRepository.findById(billId).orElseThrow().getStatus()).isEqualTo(TuitionBillStatus.PAID);
+        assertThat(paymentRepository.findByTuitionBillId(billId)).hasSize(1);
+    }
+
+    @Test
     void admissionDepositSurvivesRetryAndLinksPaymentOnlyAfterStudentCreation() {
         TuitionBill bill = new TuitionBill(null, 1L, BigDecimal.valueOf(1_000_000),
                 LocalDate.now().plusDays(30), TuitionBillStatus.UNPAID, 1L);

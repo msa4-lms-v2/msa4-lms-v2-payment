@@ -57,7 +57,7 @@ public class AdmissionPaymentWorker {
         var b=bills.findById(billId).orElseThrow();
         if(b.isAdmissionSyncComplete() || b.getAdmissionNextSyncAt().isAfter(LocalDateTime.now()))return;
         var c=academic.get(b.getAdmissionCandidateId());
-        var a=accounts.findByTuitionBillId(billId).orElse(null);
+        var a=accounts.findByOrderId(b.currentAdmissionOrderId()).orElse(null);
         if("CANCELLED".equals(c.status())) {
             if(a!=null && b.getStatus()!=TuitionBillStatus.PAID) {
                 var pg=toss.getPaymentByOrderId(a.getOrderId());

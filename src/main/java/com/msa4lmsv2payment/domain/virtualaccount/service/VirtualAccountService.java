@@ -81,7 +81,7 @@ public class VirtualAccountService {
      * 다른 도메인(refund 등)이 가상계좌를 조회해야 할 때 이 공개 메서드를 거친다.
      */
     public VirtualAccount getByTuitionBillIdOrThrow(Long tuitionBillId) {
-        return virtualAccountRepository.findByTuitionBillId(tuitionBillId)
+        return virtualAccountRepository.findFirstByTuitionBillIdOrderByIdDesc(tuitionBillId)
                 .orElseThrow(() -> new VirtualAccountNotFoundException("해당 등록금 고지에 발급된 가상계좌가 없습니다."));
     }
 
