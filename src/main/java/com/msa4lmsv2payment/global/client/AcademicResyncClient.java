@@ -1,6 +1,8 @@
 package com.msa4lmsv2payment.global.client;
 
 import java.util.Optional;
+import java.util.Map;
+import com.msa4lmsv2payment.global.security.CurrentUser;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
@@ -52,9 +54,12 @@ public class AcademicResyncClient {
 
     // 증명서 발급 자격(재학·졸업요건, 재직 상태)은 스냅샷 테이블로 캐시하지 않고 매번 실시간으로 조회한다 -
     // 발급 빈도가 낮고, 발급 시점의 최신 상태를 반영해야 하는 문서라 캐시 신선도 문제를 감수할 이유가 없다.
-    public Optional<StudentCertificateEligibilityResponse> fetchStudentCertificateEligibility(Long studentId) {
+    public Optional<StudentCertificateEligibilityResponse> fetchStudentCertificateEligibility(Long studentId, CurrentUser user) {
+        if (!"STUDENT".equals(user.role())) return Optional.empty();
         return get("/api/academic/students/{studentId}/certificate-snapshot", studentId,
-                new ParameterizedTypeReference<>() {});
+                new ParameterizedTypeReference<InternalApiResponse<StudentCertificateEligibilityResponse>>() {},
+                Map.of("X-User-Id", user.id().toString(), "X-User-Role", "STUDENT"))
+                .filter(response -> studentId.equals(response.studentId()));
     }
 
     public Optional<ProfessorCertificateEligibilityResponse> fetchProfessorCertificateEligibility(Long professorId) {
@@ -68,10 +73,16 @@ public class AcademicResyncClient {
     }
 
     private <T> Optional<T> get(String uriTemplate, Long id, ParameterizedTypeReference<InternalApiResponse<T>> typeRef) {
+        return get(uriTemplate, id, typeRef, Map.of());
+    }
+
+    private <T> Optional<T> get(String uriTemplate, Long id, ParameterizedTypeReference<InternalApiResponse<T>> typeRef,
+                               Map<String, String> headers) {
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
                 InternalApiResponse<T> response = restClient.get()
                         .uri(uriTemplate, id)
+                        .headers(values -> headers.forEach(values::set))
                         .retrieve()
                         .onStatus(status -> status.value() == 404, (req, res) -> {
                         })
