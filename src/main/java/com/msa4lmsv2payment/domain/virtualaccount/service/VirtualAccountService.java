@@ -45,6 +45,7 @@ public class VirtualAccountService {
     public VirtualAccountResponseDTO issueVirtualAccount(CurrentUser currentUser, VirtualAccountIssueRequestDTO request) {
         TuitionBill tuitionBill = tuitionBillService.getOwnedTuitionBillOrThrow(currentUser, request.tuitionBillId());
 
+        if(tuitionBill.getAdmissionCandidateId()!=null) throw new com.msa4lmsv2payment.domain.admission.AdmissionPaymentConflictException("입학 고지의 가상계좌 발급 화면을 이용하세요.");
         BigDecimal amount;
         Long installmentPlanItemId = request.installmentPlanItemId();
         if (installmentPlanItemId != null) {

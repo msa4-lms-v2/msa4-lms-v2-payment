@@ -42,15 +42,21 @@ public class VirtualAccountExpirationScheduler {
     private final VirtualAccountRepository virtualAccountRepository;
     private final AuditLogRecorder auditLogRecorder;
     private final VirtualAccountExpirationScheduler self;
+    private final com.msa4lmsv2payment.domain.tuitionbill.repository.TuitionBillRepository tuitionBillRepository;
+    private final jakarta.persistence.EntityManager entityManager;
 
     private ScheduledExecutorService scheduler;
 
     public VirtualAccountExpirationScheduler(VirtualAccountRepository virtualAccountRepository,
                                               AuditLogRecorder auditLogRecorder,
-                                              @Lazy VirtualAccountExpirationScheduler self) {
+                                              @Lazy VirtualAccountExpirationScheduler self,
+                                              com.msa4lmsv2payment.domain.tuitionbill.repository.TuitionBillRepository tuitionBillRepository,
+                                              jakarta.persistence.EntityManager entityManager) {
         this.virtualAccountRepository = virtualAccountRepository;
         this.auditLogRecorder = auditLogRecorder;
         this.self = self;
+        this.tuitionBillRepository = tuitionBillRepository;
+        this.entityManager = entityManager;
     }
 
     @PostConstruct
@@ -84,7 +90,11 @@ public class VirtualAccountExpirationScheduler {
                 EXPIRABLE_STATUSES, LocalDateTime.now());
 
         int expiredCount = 0;
+        targets.sort(java.util.Comparator.comparing(VirtualAccount::getTuitionBillId).thenComparing(VirtualAccount::getId));
         for (VirtualAccount account : targets) {
+            // 입금 처리와 같은 고지 → 계좌 잠금 순서를 지켜 오래된 ISSUED 상태로 완납을 덮어쓰지 않는다.
+            tuitionBillRepository.findByIdForUpdate(account.getTuitionBillId()).orElseThrow();
+            entityManager.refresh(account, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
             if (account.expire()) {
                 expiredCount++;
                 auditLogRecorder.record(SYSTEM_ACTOR_ID, AuditAction.VIRTUAL_ACCOUNT_EXPIRED, "VIRTUAL_ACCOUNT", account.getId(),

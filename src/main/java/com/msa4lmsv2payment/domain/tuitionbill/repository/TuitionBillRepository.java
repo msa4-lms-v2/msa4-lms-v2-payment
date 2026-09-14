@@ -13,6 +13,9 @@ import java.util.List;
 import java.util.Optional;
 
 public interface TuitionBillRepository extends JpaRepository<TuitionBill, Long> {
+    Optional<TuitionBill> findByAdmissionCandidateId(Long admissionCandidateId);
+    @Query("select t from TuitionBill t where t.admissionCandidateId is not null and t.admissionSyncComplete = false and t.admissionNextSyncAt <= :now order by t.admissionNextSyncAt, t.id")
+    List<TuitionBill> findAdmissionSyncBatch(@Param("now") java.time.LocalDateTime now,org.springframework.data.domain.Pageable pageable);
     List<TuitionBill> findByStudentIdOrderByDueDateDesc(Long studentId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

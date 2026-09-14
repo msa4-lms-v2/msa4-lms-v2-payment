@@ -5,7 +5,10 @@ package com.msa4lmsv2payment.global.client;
  * status: READY, IN_PROGRESS, WAITING_FOR_DEPOSIT, DONE, CANCELED, PARTIAL_CANCELED, ABORTED, EXPIRED.
  * 실제 토스 테스트 상점 키로 검증 전이라 필드명이 응답과 정확히 일치하는지는 미확인 상태다.
  */
-public record TossPaymentResponse(String paymentKey, String orderId, String status, Long totalAmount) {
+public record TossPaymentResponse(String paymentKey, String orderId, String status, Long totalAmount, Long balanceAmount, String lastTransactionKey) {
+
+    public TossPaymentResponse(String paymentKey,String orderId,String status,Long totalAmount) { this(paymentKey,orderId,status,totalAmount,totalAmount); }
+    public TossPaymentResponse(String paymentKey,String orderId,String status,Long totalAmount,Long balanceAmount) { this(paymentKey,orderId,status,totalAmount,balanceAmount,null); }
 
     public boolean isDone() {
         return "DONE".equals(status);

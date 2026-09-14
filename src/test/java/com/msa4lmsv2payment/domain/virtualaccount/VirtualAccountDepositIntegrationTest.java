@@ -77,6 +77,46 @@ class VirtualAccountDepositIntegrationTest {
     @Autowired
     private RefundRepository refundRepository;
 
+    @Autowired
+    private com.msa4lmsv2payment.domain.admission.AdmissionPaymentRecorder admissionRecorder;
+
+    @Test
+    void admissionDepositSurvivesRetryAndLinksPaymentOnlyAfterStudentCreation() {
+        TuitionBill bill = new TuitionBill(null, 1L, BigDecimal.valueOf(1_000_000),
+                LocalDate.now().plusDays(30), TuitionBillStatus.UNPAID, 1L);
+        bill.admission(70001L, "입학 테스트", "88");
+        bill.waitForDepositVerification();
+        bill = tuitionBillRepository.save(bill);
+        String orderId = "ADMISSION-" + bill.getId();
+        VirtualAccount account = new VirtualAccount(bill.getId(), orderId, "admission-secret",
+                "admission-" + UUID.randomUUID().toString().substring(0, 16), "88", LocalDateTime.now().plusDays(7), VirtualAccountStatus.ISSUED);
+        account.assignPaymentKey("admission-pk");
+        account = virtualAccountRepository.save(account);
+        when(tossPaymentsClient.getPaymentByOrderId(orderId))
+                .thenReturn(new TossPaymentResponse("admission-pk", orderId, "DONE", 1_000_000L));
+        var webhook = new TossVirtualAccountDepositWebhookRequest("admission-secret", "DONE",
+                "admission-tx", orderId, "2026-09-14T10:00:00");
+        String now = java.time.Instant.now().toString();
+        virtualAccountDepositService.processDeposit("admission-event", now, webhook);
+        virtualAccountDepositService.processDeposit("admission-event-retry", now, webhook);
+
+        var paid = tuitionBillRepository.findById(bill.getId()).orElseThrow();
+        assertThat(paid.getStatus()).isEqualTo(TuitionBillStatus.PAID);
+        assertThat(paid.getStudentId()).isNull();
+        assertThat(paid.getAdmissionNextSyncAt()).isAfter(LocalDateTime.now().plusMinutes(2));
+        assertThat(paymentRepository.findByTuitionBillId(bill.getId())).singleElement().satisfies(payment -> {
+            assertThat(payment.getStudentId()).isNull();
+            assertThat(payment.getAdmissionCandidateId()).isEqualTo(70001L);
+        });
+
+        admissionRecorder.synced(bill.getId(), 70002L);
+        admissionRecorder.synced(bill.getId(), 70002L);
+        assertThat(tuitionBillRepository.findById(bill.getId()).orElseThrow().isAdmissionSyncComplete()).isTrue();
+        assertThat(paymentRepository.findByTuitionBillId(bill.getId())).singleElement()
+                .satisfies(payment -> assertThat(payment.getStudentId()).isEqualTo(70002L));
+        assertThat(virtualAccountDepositRepository.findByVirtualAccountId(account.getId())).hasSize(1);
+    }
+
     @MockitoBean
     private TossPaymentsClient tossPaymentsClient;
 
@@ -129,7 +169,7 @@ class VirtualAccountDepositIntegrationTest {
 
         VirtualAccount afterPartial = virtualAccountRepository.findById(account.getId()).orElseThrow();
         assertThat(afterPartial.getStatus()).isEqualTo(VirtualAccountStatus.PARTIALLY_DEPOSITED);
-        assertThat(tuitionBillRepository.findById(bill.getId()).orElseThrow().getStatus()).isEqualTo(TuitionBillStatus.UNPAID);
+        assertThat(tuitionBillRepository.findById(bill.getId()).orElseThrow().getStatus()).isEqualTo(TuitionBillStatus.PARTIAL);
 
         virtualAccountDepositService.processDeposit("event-partial-2", java.time.Instant.now().toString(), new TossVirtualAccountDepositWebhookRequest(
                 "secret-2", "DONE", "tx-partial-2", account.getOrderId(), "2026-09-07T10:05:00"));

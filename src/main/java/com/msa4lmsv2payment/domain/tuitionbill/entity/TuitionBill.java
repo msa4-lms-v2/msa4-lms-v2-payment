@@ -33,6 +33,29 @@ public class TuitionBill {
     private Long id;
 
     private Long studentId;
+    @jakarta.persistence.Column(unique = true)
+    private Long admissionCandidateId;
+    private String admissionCustomerName;
+    private String admissionBankCode;
+    private LocalDateTime admissionNextSyncAt;
+    private boolean admissionSyncComplete;
+    private String admissionSyncError;
+    public void admission(Long candidateId,String name,String bank) {
+        admissionCandidateId=candidateId; admissionCustomerName=name; admissionBankCode=bank;
+        admissionNextSyncAt=LocalDateTime.now();
+    }
+    public void deferAdmissionSync(String error) {
+        var next=LocalDateTime.now().plusSeconds(30);
+        if(admissionNextSyncAt==null || admissionNextSyncAt.isBefore(next)) admissionNextSyncAt=next;
+        admissionSyncError=error;
+    }
+    public void waitForDepositVerification() { admissionNextSyncAt=LocalDateTime.now().plusMinutes(3); }
+    public void resumeAdmissionSync() { admissionSyncComplete=false; admissionNextSyncAt=LocalDateTime.now(); }
+    public void finishAdmissionSync() { admissionSyncComplete=true; admissionSyncError=null; }
+    public void linkAdmissionStudent(Long id) {
+        if(admissionCandidateId==null || id==null || (studentId!=null && !studentId.equals(id))) throw new IllegalStateException("입학 학생 연결 불일치");
+        studentId=id; finishAdmissionSync();
+    }
 
     private Long semesterId;
 
