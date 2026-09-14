@@ -10,6 +10,7 @@ import java.util.Optional;
 
 public interface VirtualAccountRepository extends JpaRepository<VirtualAccount, Long> {
     Optional<VirtualAccount> findByTuitionBillId(Long tuitionBillId);
+    Optional<VirtualAccount> findFirstByTuitionBillIdOrderByIdDesc(Long tuitionBillId);
 
     Optional<VirtualAccount> findByOrderId(String orderId);
 

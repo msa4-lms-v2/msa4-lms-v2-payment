@@ -45,6 +45,7 @@ public class VirtualAccountService {
     public VirtualAccountResponseDTO issueVirtualAccount(CurrentUser currentUser, VirtualAccountIssueRequestDTO request) {
         TuitionBill tuitionBill = tuitionBillService.getOwnedTuitionBillOrThrow(currentUser, request.tuitionBillId());
 
+        if(tuitionBill.getAdmissionCandidateId()!=null) throw new com.msa4lmsv2payment.domain.admission.AdmissionPaymentConflictException("입학 고지의 가상계좌 발급 화면을 이용하세요.");
         BigDecimal amount;
         Long installmentPlanItemId = request.installmentPlanItemId();
         if (installmentPlanItemId != null) {
@@ -80,7 +81,7 @@ public class VirtualAccountService {
      * 다른 도메인(refund 등)이 가상계좌를 조회해야 할 때 이 공개 메서드를 거친다.
      */
     public VirtualAccount getByTuitionBillIdOrThrow(Long tuitionBillId) {
-        return virtualAccountRepository.findByTuitionBillId(tuitionBillId)
+        return virtualAccountRepository.findFirstByTuitionBillIdOrderByIdDesc(tuitionBillId)
                 .orElseThrow(() -> new VirtualAccountNotFoundException("해당 등록금 고지에 발급된 가상계좌가 없습니다."));
     }
 

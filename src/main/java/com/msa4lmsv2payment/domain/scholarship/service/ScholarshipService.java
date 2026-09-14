@@ -35,6 +35,7 @@ public class ScholarshipService {
     public ScholarshipResponseDTO applyScholarshipDiscount(CurrentUser currentUser, ScholarshipDiscountRequestDTO request) {
         TuitionBill tuitionBill = tuitionBillService.getTuitionBillForUpdateOrThrow(request.tuitionBillId());
 
+        if(tuitionBill.getAdmissionCandidateId()!=null) throw new com.msa4lmsv2payment.domain.admission.AdmissionPaymentConflictException("입학 가상계좌 고지 금액은 발급 후 변경할 수 없습니다.");
         BigDecimal existingTotal = scholarshipRepository.findByTuitionBillId(tuitionBill.getId()).stream()
                 .map(Scholarship::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);

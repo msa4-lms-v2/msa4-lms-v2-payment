@@ -72,20 +72,27 @@ public class TossPaymentsClient {
      */
     public TossVirtualAccountIssueResponse issueVirtualAccount(String orderId, String orderName, BigDecimal amount,
                                                                  String customerName, String bankCode) {
+        return issueVirtualAccount(orderId,orderName,amount,customerName,bankCode,null);
+    }
+
+    public TossVirtualAccountIssueResponse findVirtualAccountByOrderId(String orderId) {
+        if(!secretKeyConfigured)throw new TossServiceUnavailableException("TOSS_SECRET_KEY가 설정되지 않았습니다.");
+        try { return restClient.get().uri("/v1/payments/orders/{id}",orderId).retrieve().body(TossVirtualAccountIssueResponse.class); }
+        catch(org.springframework.web.client.HttpClientErrorException.NotFound missing) { return null; }
+    }
+
+    public TossVirtualAccountIssueResponse issueVirtualAccount(String orderId,String orderName,BigDecimal amount,String customerName,String bankCode,String dueDate) {
         if (!secretKeyConfigured) {
             throw new TossServiceUnavailableException("TOSS_SECRET_KEY가 설정되지 않았습니다.");
         }
 
+        Map<String,Object> issueBody=new HashMap<>(Map.of("orderId",orderId,"orderName",orderName,"amount",amount,"customerName",customerName,"bank",bankCode));
+        if(dueDate!=null)issueBody.put("dueDate",dueDate);
         try {
             TossVirtualAccountIssueResponse response = restClient.post()
                     .uri("/v1/virtual-accounts")
-                    .body(Map.of(
-                            "orderId", orderId,
-                            "orderName", orderName,
-                            "amount", amount,
-                            "customerName", customerName,
-                            "bank", bankCode
-                    ))
+                    .header("Idempotency-Key",orderId)
+                    .body(issueBody)
                     .retrieve()
                     .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
                         throw new TossServiceUnavailableException("토스페이먼츠 가상계좌 발급 요청이 거부됐습니다(상태 " + res.getStatusCode().value() + ").");

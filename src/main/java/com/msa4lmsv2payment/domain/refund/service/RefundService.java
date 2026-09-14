@@ -248,6 +248,8 @@ public class RefundService {
             throw new RefundNotRetryableException("성공한 결제만 취소할 수 있습니다.");
         }
 
+        var admissionBill=tuitionBillService.getTuitionBillOrThrow(payment.getTuitionBillId());
+        if(admissionBill.getAdmissionCandidateId()!=null && !admissionBill.isAdmissionSyncComplete()) throw new com.msa4lmsv2payment.domain.admission.AdmissionPaymentConflictException("입학 생성 처리 중에는 환불을 요청할 수 없습니다. 등록 연결 복구 후 진행하세요.");
         BigDecimal alreadyRefunded = refundRepository.sumSucceededAmountByPayment(payment.getId());
         BigDecimal remaining = payment.getAmount().subtract(alreadyRefunded);
         if (remaining.compareTo(BigDecimal.ZERO) <= 0) {
