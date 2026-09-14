@@ -5,10 +5,8 @@ import com.msa4lmsv2payment.domain.payment.entity.PaymentType;
 import com.msa4lmsv2payment.domain.payment.entity.QPayment;
 import com.msa4lmsv2payment.domain.payment.response.PaymentHistoryResponseDTO;
 import com.msa4lmsv2payment.domain.tuitionbill.entity.QTuitionBill;
-import com.querydsl.core.types.Projections;
+import com.querydsl.core.Tuple;
 import com.querydsl.core.types.dsl.BooleanExpression;
-import com.querydsl.core.types.dsl.CaseBuilder;
-import com.querydsl.core.types.dsl.EnumExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
@@ -24,29 +22,35 @@ public class PaymentHistoryQueryRepository {
 
     private final JPAQueryFactory jpaQueryFactory;
 
+    // CaseBuilder().then(enum)/.otherwise(enum)로 납부구분을 SQL CASE로 계산하면
+    // Hibernate 7이 SqmParameter의 ValueMapping을 못 정해 500(JpaSystemException)을 던진다.
+    // installmentPlanItemId를 그대로 받아 자바에서 납부구분을 판정해 우회한다.
     public List<PaymentHistoryResponseDTO> findMyHistory(Long studentId, PaymentStatus status) {
-        return jpaQueryFactory
-                .select(Projections.constructor(
-                        PaymentHistoryResponseDTO.class,
+        List<Tuple> rows = jpaQueryFactory
+                .select(
                         payment.tuitionBillId,
                         tuitionBill.semesterId,
-                        paymentType(),
+                        payment.installmentPlanItemId,
                         payment.completedAt,
                         payment.amount,
                         payment.status
-                ))
+                )
                 .from(payment)
                 .join(tuitionBill).on(tuitionBill.id.eq(payment.tuitionBillId))
                 .where(payment.studentId.eq(studentId), statusEq(status))
                 .orderBy(payment.requestedAt.desc())
                 .fetch();
-    }
 
-    private EnumExpression<PaymentType> paymentType() {
-        return new CaseBuilder()
-                .when(payment.installmentPlanItemId.isNull())
-                .then(PaymentType.LUMP_SUM)
-                .otherwise(PaymentType.INSTALLMENT);
+        return rows.stream()
+                .map(row -> new PaymentHistoryResponseDTO(
+                        row.get(payment.tuitionBillId),
+                        row.get(tuitionBill.semesterId),
+                        row.get(payment.installmentPlanItemId) == null ? PaymentType.LUMP_SUM : PaymentType.INSTALLMENT,
+                        row.get(payment.completedAt),
+                        row.get(payment.amount),
+                        row.get(payment.status)
+                ))
+                .toList();
     }
 
     private BooleanExpression statusEq(PaymentStatus status) {
