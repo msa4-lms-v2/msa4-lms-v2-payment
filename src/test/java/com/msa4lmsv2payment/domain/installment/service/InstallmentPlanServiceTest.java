@@ -47,6 +47,7 @@ class InstallmentPlanServiceTest {
     @Mock ScholarshipService scholarshipService;
     @Mock InstallmentPlanRecorderService installmentPlanRecorder;
     @Mock AuditLogRecorder auditLogRecorder;
+    @Mock InstallmentApplicationPolicy applicationPolicy;
     @Mock TuitionBill tuitionBill;
 
     private static final CurrentUser STUDENT = new CurrentUser(1L, "STUDENT");
@@ -57,7 +58,7 @@ class InstallmentPlanServiceTest {
     @BeforeEach
     void setUp() {
         service = new InstallmentPlanService(installmentPlanRepository, installmentPlanItemRepository,
-                tuitionBillService, scholarshipService, installmentPlanRecorder, auditLogRecorder);
+                tuitionBillService, scholarshipService, installmentPlanRecorder, auditLogRecorder, applicationPolicy);
     }
 
     private InstallmentPlan activePlan() {

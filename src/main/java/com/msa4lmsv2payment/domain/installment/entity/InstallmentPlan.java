@@ -52,7 +52,11 @@ public class InstallmentPlan {
         this.status = InstallmentPlanStatus.REQUESTED;
     }
 
-    // ADMIN 승인 전에는 회차 결제(체크아웃 세션 생성)를 할 수 없다 - 신청만으로는 분할납부를 시작할 수 없다.
+    // 자동 심사 또는 관리자 심사를 통과한 계획만 회차 결제가 가능하다.
+    public void approveAutomatically() {
+        approve(null);
+    }
+
     public void approve(Long reviewerId) {
         requireReviewable();
         this.status = InstallmentPlanStatus.ACTIVE;
