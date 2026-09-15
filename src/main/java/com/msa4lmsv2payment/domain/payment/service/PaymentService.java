@@ -71,6 +71,7 @@ public class PaymentService {
     public CheckoutSessionResponseDTO createCheckoutSession(CurrentUser currentUser, CheckoutSessionRequestDTO request) {
         TuitionBill tuitionBill = tuitionBillService.getOwnedTuitionBillOrThrow(currentUser, request.tuitionBillId());
 
+        if(tuitionBill.getAdmissionCandidateId()!=null) throw new com.msa4lmsv2payment.domain.admission.AdmissionPaymentConflictException("입학 등록금은 발급된 가상계좌로 납부하세요.");
         Payment payment;
         if (request.installmentPlanItemId() != null) {
             // 분할납부 회차 결제 - 회차 금액은 클라이언트가 지정할 수 없고 서버가 계획에 저장된 금액을 그대로 쓴다(위조 방지).

@@ -93,6 +93,7 @@ public class VirtualAccountDepositService {
             depositRecorder.recordDeposit(virtualAccount.getId(), amount,
                     webhook.transactionKey(), transmissionId, receivedAt);
         } catch (DataIntegrityViolationException duplicate) {
+            if(!virtualAccountDepositRepository.existsByWebhookEventId(transmissionId) && !virtualAccountDepositRepository.existsByTossTransactionKey(webhook.transactionKey())) throw duplicate;
             log.info("동시에 중복 수신된 가상계좌 Webhook, 무시함 [eventId={}, transactionKey={}]",
                     transmissionId, webhook.transactionKey());
         }

@@ -34,6 +34,12 @@ public class Payment {
     private Long tuitionBillId;
 
     private Long studentId;
+    private Long admissionCandidateId;
+    public void admissionCandidate(Long id) { admissionCandidateId=id; }
+    public void linkAdmissionStudent(Long id) {
+        if(id==null || (studentId!=null && !studentId.equals(id))) throw new IllegalStateException("납부 학생 연결 불일치");
+        studentId=id;
+    }
 
     private BigDecimal amount;
 

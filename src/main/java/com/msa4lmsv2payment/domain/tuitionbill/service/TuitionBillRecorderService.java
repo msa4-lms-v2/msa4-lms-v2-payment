@@ -33,7 +33,7 @@ public class TuitionBillRecorderService {
                 .toList();
         tuitionBillItemRepository.saveAll(items);
         auditLogRecorder.record(actorId, AuditAction.TUITION_BILL_CREATED, "TUITION_BILL", saved.getId(),
-                Map.of("studentId", saved.getStudentId(), "billingAmount", saved.getBillingAmount()), null);
+                Map.of(saved.getAdmissionCandidateId()==null ? "studentId" : "admissionCandidateId", saved.getAdmissionCandidateId()==null ? saved.getStudentId() : saved.getAdmissionCandidateId(), "billingAmount", saved.getBillingAmount()), null);
         return saved;
     }
 }

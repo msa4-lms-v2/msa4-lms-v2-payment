@@ -48,6 +48,8 @@ public class VirtualAccountDepositRecorderService {
     private final PaymentResultRecorderService paymentResultRecorder;
     private final RefundRecorderService refundRecorder;
     private final AuditLogRecorder auditLogRecorder;
+    private final jakarta.persistence.EntityManager entityManager;
+    private final com.msa4lmsv2payment.domain.payment.repository.PaymentRepository paymentRepository;
 
     @Transactional
     public void recordDeposit(Long virtualAccountId, BigDecimal amount, String transactionKey,
@@ -55,12 +57,20 @@ public class VirtualAccountDepositRecorderService {
         VirtualAccount virtualAccount = virtualAccountRepository.findById(virtualAccountId)
                 .orElseThrow(() -> new VirtualAccountNotFoundException("가상계좌를 찾을 수 없습니다: " + virtualAccountId));
 
+        TuitionBill lockedBill = tuitionBillService.getTuitionBillForUpdateOrThrow(virtualAccount.getTuitionBillId());
+        entityManager.refresh(virtualAccount,jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        if(virtualAccountDepositRepository.existsByWebhookEventId(webhookEventId) || virtualAccountDepositRepository.existsByTossTransactionKey(transactionKey)) return;
+        if (virtualAccount.getPaymentKey() != null
+                && paymentRepository.findByPgTransactionId(virtualAccount.getPaymentKey()).isPresent()) return;
+        if(virtualAccount.getStatus()==VirtualAccountStatus.EXPIRED) {
+            recordExpired(virtualAccount,amount,transactionKey,webhookEventId,receivedAt);return;
+        }
         VirtualAccountDeposit deposit = virtualAccountDepositRepository.save(
                 new VirtualAccountDeposit(virtualAccountId, amount, transactionKey, webhookEventId, receivedAt));
         auditLogRecorder.record(SYSTEM_ACTOR_ID, AuditAction.VIRTUAL_ACCOUNT_DEPOSIT_RECEIVED, "VIRTUAL_ACCOUNT", virtualAccountId,
                 Map.of("depositId", deposit.getId(), "amount", amount), null);
 
-        TuitionBill tuitionBill = tuitionBillService.getTuitionBillOrThrow(virtualAccount.getTuitionBillId());
+        TuitionBill tuitionBill = lockedBill;
         Long installmentPlanItemId = virtualAccount.getInstallmentPlanItemId();
         BigDecimal netDue;
         if (installmentPlanItemId != null) {
@@ -78,6 +88,7 @@ public class VirtualAccountDepositRecorderService {
         virtualAccountRepository.save(virtualAccount);
 
         if (virtualAccount.getStatus() != VirtualAccountStatus.DEPOSITED) {
+            tuitionBillService.changeStatus(tuitionBill.getId(),TuitionBillStatus.PARTIAL);
             return; // PARTIALLY_DEPOSITED - 나머지 입금을 기다린다.
         }
 
@@ -85,6 +96,7 @@ public class VirtualAccountDepositRecorderService {
         // 나중에 이 결제를 취소(환불)하려면 토스 cancel API가 paymentKey를 요구하기 때문이다.
         Payment payment = new Payment(tuitionBill.getId(), tuitionBill.getStudentId(), netDue, PaymentMethod.VIRTUAL_ACCOUNT,
                 PaymentStatus.REQUESTED, installmentPlanItemId);
+        payment.admissionCandidate(tuitionBill.getAdmissionCandidateId());
         payment.succeed(virtualAccount.getPaymentKey());
         Payment savedPayment = paymentResultRecorder.saveWithAudit(SYSTEM_ACTOR_ID, payment, null);
 
@@ -95,6 +107,7 @@ public class VirtualAccountDepositRecorderService {
             tuitionBillService.changeStatus(tuitionBill.getId(), TuitionBillStatus.PAID);
         }
 
+        if(tuitionBill.getAdmissionCandidateId()!=null) tuitionBill.waitForDepositVerification();
         BigDecimal excess = totalDeposited.subtract(netDue);
         if (excess.compareTo(BigDecimal.ZERO) > 0) {
             // 초과입금 환불에는 자퇴 환불 같은 비율 개념이 없어 refund_rate는 "전액 환불"을 뜻하는 1로 둔다.
@@ -111,9 +124,11 @@ public class VirtualAccountDepositRecorderService {
     @Transactional
     public void recordExpiredAccountDeposit(Long virtualAccountId, BigDecimal amount, String transactionKey,
                                             String webhookEventId, LocalDateTime receivedAt) {
-        VirtualAccount virtualAccount = virtualAccountRepository.findById(virtualAccountId)
-                .orElseThrow(() -> new VirtualAccountNotFoundException("가상계좌를 찾을 수 없습니다: " + virtualAccountId));
+        recordDeposit(virtualAccountId,amount,transactionKey,webhookEventId,receivedAt);
+    }
 
+    private void recordExpired(VirtualAccount virtualAccount,BigDecimal amount,String transactionKey,String webhookEventId,LocalDateTime receivedAt) {
+        Long virtualAccountId=virtualAccount.getId();
         VirtualAccountDeposit deposit = virtualAccountDepositRepository.save(
                 new VirtualAccountDeposit(virtualAccountId, amount, transactionKey, webhookEventId, receivedAt));
         auditLogRecorder.record(SYSTEM_ACTOR_ID, AuditAction.VIRTUAL_ACCOUNT_DEPOSIT_RECEIVED, "VIRTUAL_ACCOUNT", virtualAccountId,

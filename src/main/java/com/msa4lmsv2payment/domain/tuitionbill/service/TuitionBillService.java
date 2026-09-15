@@ -127,7 +127,7 @@ public class TuitionBillService {
 
         if (!currentUser.isAdmin()) {
             Long studentId = resolveStudentId(currentUser);
-            if (!tuitionBill.getStudentId().equals(studentId)) {
+            if (!java.util.Objects.equals(tuitionBill.getStudentId(),studentId)) {
                 throw new TuitionBillAccessDeniedException("본인의 등록금 고지만 조회할 수 있습니다.");
             }
         }

@@ -114,7 +114,7 @@ public class DocumentService {
     public DocumentResponseDTO issueAcademicCertificate(CurrentUser currentUser, AcademicCertificateRequestDTO request) {
         Long studentId = tuitionBillService.resolveStudentId(currentUser);
         StudentCertificateEligibilityResponse eligibility = academicResyncClient
-                .fetchStudentCertificateEligibility(studentId)
+                .fetchStudentCertificateEligibility(studentId, currentUser)
                 .orElseThrow(() -> new AcademicResourceNotFoundException("학생 학적 정보를 확인할 수 없습니다."));
 
         String title;
