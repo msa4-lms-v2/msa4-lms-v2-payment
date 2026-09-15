@@ -10,10 +10,11 @@ import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-const output = resolve(root, '../analytics/evidence/msa4-lms-v2/admission-e2e-20260915');
+const runId = 'admission-trusted-e2e-' + new Date().toISOString().replace(/[-:.TZ]/g, '');
+const output = resolve(root, '../analytics/evidence/msa4-lms-v2', runId);
 mkdirSync(output, { recursive: true });
-const prefix = 'lms-admission-e2e-20260915';
-const label = 'lms.test=admission-e2e-20260915';
+const prefix = 'lms-' + runId;
+const label = 'lms.test=' + runId;
 const containers = [];
 const runtimeCopies = [];
 const processes = new Map();
@@ -74,7 +75,6 @@ const commonEnv = {
   JWT_KID: 'e2e', JWT_PRIVATE_KEY_B64: Buffer.from(privateKey.export({ type: 'pkcs8', format: 'pem' })).toString('base64'),
   JWT_PUBLIC_KEY_B64: Buffer.from(publicKey.export({ type: 'spki', format: 'pem' })).toString('base64'),
   GATEWAY_URI: 'http://127.0.0.1:18080', APP_DESCRIPTION: 'local-e2e', FILE_SERVER_URI: 'http://127.0.0.1:18081', FILE_STORAGE_PATH: output,
-  ADMISSION_PAYMENT_TOKEN: 'e2e-payment-only', ADMISSION_AUTH_TOKEN: 'e2e-auth-only',
   ADMISSION_ACADEMIC_BASE_URL: 'http://127.0.0.1:18082', ACADEMIC_INTERNAL_BASE_URL: 'http://127.0.0.1:18082',
   GATEWAY_INTERNAL_BASE_URL: 'http://127.0.0.1:18082', AUTH_SERVICE_URL: 'http://127.0.0.1:18081',
   TOSS_SECRET_KEY: 'e2e-not-a-real-pg-key', TOSS_CLIENT_KEY: 'e2e-not-a-real-client-key', CERTIFICATE_SIGNING_KEY: 'e2e-local-signing-key-long-enough',
@@ -82,6 +82,9 @@ const commonEnv = {
   ACADEMIC_SERVICE_NAME: 'academic', ACADEMIC_SERVICE_URI: 'http://127.0.0.1:18082', ACADEMIC_SERVICE_PREDICATE: '/api/academic/**', ACADEMIC_SERVICE_OPEN_API_PATH: '/api-docs',
   PAYMENT_SERVICE_NAME: 'payment', PAYMENT_SERVICE_URI: 'http://127.0.0.1:18083', PAYMENT_SERVICE_PREDICATE: '/api/payment/**', PAYMENT_SERVICE_OPEN_API_PATH: '/api-docs',
 };
+// 부모 셸에 이전 입학 토큰이 있어도 이번 검증에서는 전달하지 않는다.
+delete commonEnv.ADMISSION_PAYMENT_TOKEN;
+delete commonEnv.ADMISSION_AUTH_TOKEN;
 function startService(name) {
   if (processes.has(name)) throw new Error(name + ' is already running');
   const jar = readdirSync(join(repo(name), 'build/libs')).find(file => file.endsWith('.jar') && !file.endsWith('-plain.jar'));
@@ -144,6 +147,18 @@ async function scenario() {
     departmentId: 1, advisorProfessorId: 1, admissionYear: year,
   });
   const id = candidate.id; state.candidateId = id;
+  const internalPath = '/api/academic/internal/admissions/' + id;
+  const internal = await fetch('http://127.0.0.1:18082' + internalPath);
+  assert.equal(internal.status, 200);
+  assert.equal((await internal.json()).data.tuitionPaid, false);
+  for (const [method, suffix] of [['GET', ''], ['POST', '/bill'], ['POST', '/paid'], ['POST', '/student'], ['POST', '/activated']]) {
+    const external = await fetch('http://127.0.0.1:18080' + internalPath + suffix, {
+      method, headers: { Authorization: 'Bearer ' + token(), 'Content-Type': 'application/json' },
+      body: method === 'POST' ? '{}' : undefined,
+    });
+    assert.equal(external.status, 401);
+  }
+  checkpoint('입학 토큰 없이 내부 조회 성공, 관리자 JWT도 SCG 내부 경로 접근 차단');
   assert.equal(candidate.status, 'PENDING');
   assert.equal(sql('lms_auth', `SELECT COUNT(*) FROM accounts WHERE admission_candidate_id=${id}`), '0');
   checkpoint('등록만으로 계정을 만들지 않음', { candidateId: id });
@@ -153,6 +168,11 @@ async function scenario() {
   const billId = detail.bill.id;
   const order = orders.get('ADMISSION-' + billId);
   assert(order, 'PG issue must use deterministic order');
+  // 헤더 인증 제거가 실제 완납 검증을 우회하지 않는지 worker의 한 주기 이상 확인한다.
+  await sleep(12000);
+  assert.equal(sql('lms_academic', `SELECT tuition_paid FROM admission_candidates WHERE id=${id}`), '0');
+  assert.equal(sql('lms_auth', `SELECT COUNT(*) FROM accounts WHERE admission_candidate_id=${id}`), '0');
+  checkpoint('PG 미입금 상태에서는 완납 통지와 계정 생성 없음');
   const again = await api(`/api/payment/admission-candidates/${id}/tuition`, input);
   assert.equal(again.virtualAccount.id, detail.virtualAccount.id);
   checkpoint('Gateway 발급 및 중복 요청의 동일 계좌 반환', { billId });
@@ -222,7 +242,7 @@ async function scenario() {
 async function cleanup() {
   for (const name of [...processes.keys()]) await stopService(name);
   for (const name of containers.reverse()) {
-    if (docker(['inspect', '--format', '{{index .Config.Labels "lms.test"}}', name]) !== 'admission-e2e-20260915') throw new Error('Container ownership mismatch');
+    if (docker(['inspect', '--format', '{{index .Config.Labels "lms.test"}}', name]) !== runId) throw new Error('Container ownership mismatch');
     docker(['rm', '-f', name]);
   }
   for (const path of runtimeCopies) unlinkSync(path);
