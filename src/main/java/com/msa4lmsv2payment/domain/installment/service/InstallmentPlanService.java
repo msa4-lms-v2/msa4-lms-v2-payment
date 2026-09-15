@@ -11,6 +11,7 @@ import com.msa4lmsv2payment.domain.installment.request.InstallmentPlanDecision;
 import com.msa4lmsv2payment.domain.installment.request.InstallmentPlanReviewRequestDTO;
 import com.msa4lmsv2payment.domain.installment.response.InstallmentPlanItemResponseDTO;
 import com.msa4lmsv2payment.domain.installment.response.InstallmentPlanResponseDTO;
+import com.msa4lmsv2payment.domain.installment.response.InstallmentPreviewResponseDTO;
 import com.msa4lmsv2payment.domain.scholarship.request.PaymentScholarshipAllocationRequestDTO;
 import com.msa4lmsv2payment.domain.scholarship.service.ScholarshipService;
 import com.msa4lmsv2payment.domain.tuitionbill.entity.TuitionBill;
@@ -48,6 +49,18 @@ public class InstallmentPlanService {
     private final ScholarshipService scholarshipService;
     private final InstallmentPlanRecorderService installmentPlanRecorder;
     private final AuditLogRecorder auditLogRecorder;
+    private final InstallmentApplicationPolicy applicationPolicy;
+
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public InstallmentPreviewResponseDTO preview(CurrentUser currentUser, InstallmentPlanCreateRequestDTO request) {
+        TuitionBill bill = tuitionBillService.getOwnedTuitionBillOrThrow(currentUser, request.tuitionBillId());
+        BigDecimal amount = scholarshipService.calculateAllocation(currentUser,
+                new PaymentScholarshipAllocationRequestDTO(bill.getId())).actualPaymentAmount();
+        applicationPolicy.validate(bill, amount, request.totalRounds());
+        return new InstallmentPreviewResponseDTO(applicationPolicy.requiresReview(bill),
+                buildItems(amount, request.totalRounds(), bill.getDueDate()).stream()
+                        .map(item -> new InstallmentPreviewResponseDTO.Item(item.roundNo(), item.amount(), item.dueDate())).toList());
+    }
 
     // 회차 금액은 항상 서버가 실납부액(고지금액-장학금)을 회차 수로 나눠 계산한다 - 클라이언트가 회차 금액을 지정할 수 없다(위조 방지).
     // 소유권 검증이 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다.
@@ -61,6 +74,7 @@ public class InstallmentPlanService {
 
         BigDecimal actualPaymentAmount = scholarshipService.calculateAllocation(
                 currentUser, new PaymentScholarshipAllocationRequestDTO(tuitionBill.getId())).actualPaymentAmount();
+        applicationPolicy.validate(tuitionBill, actualPaymentAmount, request.totalRounds());
 
         InstallmentPlan saved;
         try {
@@ -89,7 +103,7 @@ public class InstallmentPlanService {
                 .orElseThrow(() -> new InstallmentPlanNotFoundException("해당 고지의 분할납부 계획을 찾을 수 없습니다."));
     }
 
-    // ADMIN이 신청을 승인해야만 회차 결제가 가능하다 - 승인 전 신청만으로는 분할납부를 시작할 수 없다(사용자 확정 요구사항).
+    // 자동 승인되지 않은 신청은 ADMIN이 심사한다.
     @Transactional
     public InstallmentPlanResponseDTO reviewPlan(CurrentUser admin, Long planId, InstallmentPlanReviewRequestDTO request) {
         InstallmentPlan plan = installmentPlanRepository.findById(planId)
@@ -157,7 +171,8 @@ public class InstallmentPlanService {
         item.markPaid();
 
         long unpaidCount = installmentPlanItemRepository
-                .countByInstallmentPlanIdAndStatus(item.getInstallmentPlanId(), InstallmentItemStatus.SCHEDULED);
+                .findByInstallmentPlanIdOrderByRoundNo(item.getInstallmentPlanId()).stream()
+                .filter(it -> it.getStatus() != InstallmentItemStatus.PAID).count();
         if (unpaidCount == 0) {
             installmentPlanRepository.findById(item.getInstallmentPlanId()).ifPresent(InstallmentPlan::complete);
         }

@@ -53,6 +53,31 @@ class InstallmentPlanSecurityIntegrationTest {
     }
 
     @Test
+    void 미리보기는_인증이_필요하다() throws Exception {
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/payment/installment-plans/preview")
+                .contentType("application/json").content("{\"tuitionBillId\":1,\"totalRounds\":3}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void 교수는_분할납부_미리보기를_할수없다() throws Exception {
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/payment/installment-plans/preview")
+                .header(GatewayContextAuthenticationFilter.USER_ID_HEADER, "3")
+                .header(GatewayContextAuthenticationFilter.USER_ROLE_HEADER, "PROFESSOR")
+                .contentType("application/json").content("{\"tuitionBillId\":1,\"totalRounds\":3}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void 미리보기_잘못된_회차는_400이다() throws Exception {
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/payment/installment-plans/preview")
+                .header(GatewayContextAuthenticationFilter.USER_ID_HEADER, "1")
+                .header(GatewayContextAuthenticationFilter.USER_ROLE_HEADER, "ADMIN")
+                .contentType("application/json").content("{\"tuitionBillId\":1,\"totalRounds\":5}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void 인증_헤더가_없으면_401이다() throws Exception {
         mockMvc.perform(patch("/api/payment/installment-plans/1/review")
                         .contentType("application/json")
