@@ -19,6 +19,10 @@ import jakarta.validation.Valid;
 import java.net.URI;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -103,6 +107,19 @@ public class DocumentController {
     ) {
         String downloadUrl = documentService.getCertificateDownloadUrl(currentUser, documentId);
         return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(downloadUrl)).build();
+    }
+
+    @Operation(summary = "증명서 PDF 파일 응답", description = "본인 또는 ADMIN의 권한을 확인한 뒤 PDF를 직접 반환한다. 외부 저장소로 인증 헤더를 전달하지 않는다.")
+    @PreAuthorize("hasAnyRole('STUDENT', 'PROFESSOR', 'ADMIN')")
+    @GetMapping("/api/payment/certificates/{documentId}/content")
+    public ResponseEntity<byte[]> certificateContent(
+            @AuthenticationPrincipal CurrentUser currentUser, @PathVariable Long documentId) {
+        byte[] pdf = documentService.downloadCertificate(currentUser, documentId);
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_PDF)
+                .contentLength(pdf.length).cacheControl(CacheControl.noStore())
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename("certificate-" + documentId + ".pdf").build().toString())
+                .body(pdf);
     }
 
     @Operation(summary = "증명서 진위확인", description = """

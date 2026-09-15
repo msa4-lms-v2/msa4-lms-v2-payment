@@ -213,15 +213,29 @@ public class DocumentService {
     // 발급된 증명서 PDF의 다운로드 URL(만료 1일)을 발급한다. 본인(발급받은 학생/교수) 또는 ADMIN만 가능하다.
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public String getCertificateDownloadUrl(CurrentUser currentUser, Long documentId) {
+        Document document = requireDownloadableDocument(currentUser, documentId);
+        return fileStorageService.presignedDownloadUrl(document.getFilePath());
+    }
+
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public byte[] downloadCertificate(CurrentUser currentUser, Long documentId) {
+        Document document = requireDownloadableDocument(currentUser, documentId);
+        return fileStorageService.download(document.getFilePath());
+    }
+
+    private Document requireDownloadableDocument(CurrentUser currentUser, Long documentId) {
         Document document = documentRepository.findById(documentId)
                 .orElseThrow(() -> new DocumentNotFoundException("해당 증명서를 찾을 수 없습니다."));
-        if (document.getFilePath() == null) {
-            throw new DocumentNotFoundException("증명서 파일이 아직 생성되지 않았습니다.");
-        }
         if (!isOwner(currentUser, document)) {
             throw new CertificateNotEligibleException("본인이 발급받은 증명서만 다운로드할 수 있습니다.");
         }
-        return fileStorageService.presignedDownloadUrl(document.getFilePath());
+        if (document.isRevoked()) {
+            throw new CertificateNotEligibleException("폐기된 증명서는 다운로드할 수 없습니다.");
+        }
+        if (document.getFilePath() == null || document.getFilePath().isBlank()) {
+            throw new DocumentNotFoundException("증명서 파일이 아직 생성되지 않았습니다.");
+        }
+        return document;
     }
 
     private boolean isOwner(CurrentUser currentUser, Document document) {
