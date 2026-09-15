@@ -49,6 +49,18 @@ class AdmissionPaymentWorkerTest {
         bill.linkAdmissionStudent(20L);bill.linkAdmissionStudent(20L);
         assertThatThrownBy(()->bill.linkAdmissionStudent(21L)).isInstanceOf(IllegalStateException.class);
     }
+    @Test void mismatchedOrderPaymentKeyOrAmountCannotNotifyFullPayment() {
+        paidAccount();
+        for (var response : new TossPaymentResponse[]{
+                new TossPaymentResponse("pk", "OTHER-ORDER", "DONE", 10000L),
+                new TossPaymentResponse("other-key", "ADMISSION-100", "DONE", 10000L),
+                new TossPaymentResponse("pk", "ADMISSION-100", "DONE", 9000L)}) {
+            when(toss.getPaymentByOrderId("ADMISSION-100")).thenReturn(response);
+            worker.synchronizeBill(100L);
+        }
+        verify(academic, never()).post(any(), any(), any());
+        verify(recorder, times(3)).deferred(100L, "PAYMENT_REVERIFICATION_REQUIRED");
+    }
     @Test void lostWebhookIsRecoveredBeforeAccountCreation() {
         paidAccount();bill.changeStatus(TuitionBillStatus.UNPAID);
         when(toss.getPaymentByOrderId("ADMISSION-100"))
