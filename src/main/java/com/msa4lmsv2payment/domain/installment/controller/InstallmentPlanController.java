@@ -32,10 +32,19 @@ public class InstallmentPlanController {
 
     private final InstallmentPlanService installmentPlanService;
 
+    @Operation(summary = "분할납부 신청 미리보기", description = "회차별 금액·기한과 자동 승인 가능 여부를 조회한다. 신청 시 다시 심사한다.")
+    @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
+    @PostMapping("/api/payment/installment-plans/preview")
+    public GlobalResponseDTO<com.msa4lmsv2payment.domain.installment.response.InstallmentPreviewResponseDTO> preview(
+            @AuthenticationPrincipal CurrentUser currentUser,
+            @RequestBody @Valid InstallmentPlanCreateRequestDTO request) {
+        return GlobalResponseDTO.success(installmentPlanService.preview(currentUser, request));
+    }
+
     @Operation(summary = "분할납부 신청", description = """
             등록금 고지 1건에 대해 회차별 납부 계획을 신청한다. 회차 금액은 실납부액(고지금액-장학금)을 회차 수로 나눠 서버가 계산하며,
             클라이언트가 회차 금액을 지정할 수 없다. 고지 1건당 신청은 하나만 만들 수 있다.
-            신청 상태(REQUESTED)로 생성되며, ADMIN이 승인(ACTIVE)해야만 회차 결제를 시작할 수 있다. STUDENT 본인 / ADMIN 관리 범위.
+            연체 이력이 없으면 자동 승인(ACTIVE), 있으면 관리자 심사 대기(REQUESTED)로 생성된다. STUDENT 본인 / ADMIN 관리 범위.
             """)
     @ApiResponse(responseCode = "201", description = "생성 성공")
     @CustomApiResponse({CustomResponseCode.ACCESS_DENIED, CustomResponseCode.NOT_FOUND_DATA, CustomResponseCode.DUPLICATE_DATA})

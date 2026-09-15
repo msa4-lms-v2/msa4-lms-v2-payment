@@ -94,7 +94,7 @@ public class OverdueTransitionScheduler {
 
     @Transactional
     public void transitionOverdueTuitionBills() {
-        List<TuitionBill> targets = tuitionBillRepository.findByStatusInAndDueDateBefore(
+        List<TuitionBill> targets = tuitionBillRepository.findOverdueWithoutApprovedPlan(
                 OVERDUE_ELIGIBLE_STATUSES, LocalDate.now());
         for (TuitionBill tuitionBill : targets) {
             tuitionBill.changeStatus(TuitionBillStatus.OVERDUE);
@@ -108,7 +108,7 @@ public class OverdueTransitionScheduler {
 
     @Transactional
     public void transitionOverdueInstallmentItems() {
-        List<InstallmentPlanItem> targets = installmentPlanItemRepository.findByStatusAndDueDateBefore(
+        List<InstallmentPlanItem> targets = installmentPlanItemRepository.findOverdueActiveItems(
                 InstallmentItemStatus.SCHEDULED, LocalDate.now());
         for (InstallmentPlanItem item : targets) {
             item.markOverdue();

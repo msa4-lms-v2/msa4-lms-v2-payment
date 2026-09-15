@@ -24,5 +24,11 @@ public interface TuitionBillRepository extends JpaRepository<TuitionBill, Long> 
 
     List<TuitionBill> findByStatusInAndDueDateBefore(List<TuitionBillStatus> statuses, LocalDate date);
 
+    @Query("select t from TuitionBill t where t.status in :statuses and t.dueDate < :date "
+            + "and not exists (select p.id from InstallmentPlan p where p.tuitionBillId = t.id and p.status in "
+            + "(com.msa4lmsv2payment.domain.installment.entity.InstallmentPlanStatus.ACTIVE, "
+            + "com.msa4lmsv2payment.domain.installment.entity.InstallmentPlanStatus.COMPLETED))")
+    List<TuitionBill> findOverdueWithoutApprovedPlan(@Param("statuses") List<TuitionBillStatus> statuses, @Param("date") LocalDate date);
+
     Optional<TuitionBill> findByStudentIdAndSemesterId(Long studentId, Long semesterId);
 }

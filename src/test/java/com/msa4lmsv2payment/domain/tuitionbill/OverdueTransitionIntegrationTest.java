@@ -69,6 +69,8 @@ class OverdueTransitionIntegrationTest {
         TuitionBill bill = tuitionBillRepository.save(
                 new TuitionBill(23L, 1L, BigDecimal.valueOf(900_000), LocalDate.now().plusDays(30), TuitionBillStatus.UNPAID, 1L));
         InstallmentPlan plan = installmentPlanRepository.save(new InstallmentPlan(bill.getId(), 3));
+        plan.approve(1L);
+        installmentPlanRepository.save(plan);
 
         InstallmentPlanItem overdueItem = installmentPlanItemRepository.save(
                 new InstallmentPlanItem(plan.getId(), 1, BigDecimal.valueOf(300_000), LocalDate.now().minusDays(1)));
