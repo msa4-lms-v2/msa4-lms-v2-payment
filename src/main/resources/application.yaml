@@ -103,4 +103,4 @@ logging:
 
 academic:
   internal:
-    base-url: ${ACADEMIC_INTERNAL_BASE_URL:http://localhost:8082}
+    base-url: ${ACADEMIC_INTERNAL_BASE_URL:${GATEWAY_INTERNAL_BASE_URL:http://localhost:8082}}

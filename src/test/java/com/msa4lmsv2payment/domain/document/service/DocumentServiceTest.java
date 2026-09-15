@@ -75,6 +75,34 @@ class DocumentServiceTest {
     }
 
     // DocumentService.hmacSign()과 동일한 알고리즘·키로 계산해 테스트에서 재사용한다.
+    @Test
+    void 본인_PDF는_저장소에서_직접_읽고_재다운로드시_재발급하지_않는다() {
+        var user = new CurrentUser(7L, "STUDENT");
+        when(tuitionBillService.resolveStudentId(user)).thenReturn(8L);
+        when(documentRepository.findById(1L)).thenReturn(Optional.of(
+                new Document(8L, null, DocumentType.ENROLLMENT, TOKEN, "hash", "test.pdf")));
+        byte[] pdf = "%PDF-test".getBytes(StandardCharsets.UTF_8);
+        when(fileStorageService.download("test.pdf")).thenReturn(pdf);
+        org.junit.jupiter.api.Assertions.assertArrayEquals(pdf, service.downloadCertificate(user, 1L));
+        org.junit.jupiter.api.Assertions.assertArrayEquals(pdf, service.downloadCertificate(user, 1L));
+        verify(documentRepository, never()).save(any());
+        verify(fileStorageService, never()).presignedDownloadUrl(any());
+    }
+
+    @Test
+    void 타인의_PDF와_폐기된_PDF는_저장소를_읽기_전에_거부한다() {
+        var user = new CurrentUser(7L, "STUDENT");
+        when(tuitionBillService.resolveStudentId(user)).thenReturn(8L);
+        var other = new Document(99L, null, DocumentType.ENROLLMENT, TOKEN, "hash", "other.pdf");
+        var revoked = new Document(8L, null, DocumentType.ENROLLMENT, TOKEN, "hash", "revoked.pdf");
+        revoked.revoke();
+        when(documentRepository.findById(1L)).thenReturn(Optional.of(other));
+        when(documentRepository.findById(2L)).thenReturn(Optional.of(revoked));
+        assertThrows(CertificateNotEligibleException.class, () -> service.downloadCertificate(user, 1L));
+        assertThrows(CertificateNotEligibleException.class, () -> service.downloadCertificate(user, 2L));
+        verify(fileStorageService, never()).download(any());
+    }
+
     private String hmacSign(String value) throws Exception {
         Mac mac = Mac.getInstance("HmacSHA256");
         mac.init(new SecretKeySpec(SIGNING_KEY.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));

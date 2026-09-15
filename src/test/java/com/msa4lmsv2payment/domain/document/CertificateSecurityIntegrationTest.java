@@ -52,6 +52,48 @@ class CertificateSecurityIntegrationTest {
     @Autowired
     private DocumentVerificationRepository documentVerificationRepository;
 
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    private com.msa4lmsv2payment.domain.tuitionbill.service.TuitionBillService tuitionBillService;
+
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    private com.msa4lmsv2payment.global.file.FileStorageService fileStorageService;
+
+    @Test
+    void 학생_내역과_PDF는_로그인이_필요하고_교수는_학생_내역을_읽을_수_없다() throws Exception {
+        mockMvc.perform(get("/api/payment/students/me/certificates")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/payment/certificates/1/content")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/payment/students/me/certificates")
+                .header(GatewayContextAuthenticationFilter.USER_ID_HEADER, "7")
+                .header(GatewayContextAuthenticationFilter.USER_ROLE_HEADER, "PROFESSOR"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void 학생은_DB에_저장된_본인_내역과_PDF만_조회한다() throws Exception {
+        var user = new com.msa4lmsv2payment.global.security.CurrentUser(7L, "STUDENT");
+        org.mockito.Mockito.when(tuitionBillService.resolveStudentId(user)).thenReturn(9101L);
+        var own = documentRepository.save(new Document(9101L, null, DocumentType.ENROLLMENT, "own-history", "hash", "fixture.pdf"));
+        var other = documentRepository.save(new Document(9102L, null, DocumentType.ENROLLMENT, "other-history", "hash", "other.pdf"));
+        byte[] pdf = "%PDF-local-fixture".getBytes(StandardCharsets.US_ASCII);
+        org.mockito.Mockito.when(fileStorageService.download("fixture.pdf")).thenReturn(pdf);
+        mockMvc.perform(get("/api/payment/students/me/certificates")
+                .header(GatewayContextAuthenticationFilter.USER_ID_HEADER, "7")
+                .header(GatewayContextAuthenticationFilter.USER_ROLE_HEADER, "STUDENT"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalCount").value(1))
+                .andExpect(jsonPath("$.data.items[0].id").value(own.getId()));
+        mockMvc.perform(get("/api/payment/certificates/" + own.getId() + "/content")
+                .header(GatewayContextAuthenticationFilter.USER_ID_HEADER, "7")
+                .header(GatewayContextAuthenticationFilter.USER_ROLE_HEADER, "STUDENT"))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().bytes(pdf))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Cache-Control", "no-store"));
+        mockMvc.perform(get("/api/payment/certificates/" + other.getId() + "/content")
+                .header(GatewayContextAuthenticationFilter.USER_ID_HEADER, "7")
+                .header(GatewayContextAuthenticationFilter.USER_ROLE_HEADER, "STUDENT"))
+                .andExpect(status().is4xxClientError());
+        org.mockito.Mockito.verify(fileStorageService, org.mockito.Mockito.never()).download("other.pdf");
+    }
+
     @Test
     void 진위확인은_인증_헤더_없이_호출할_수_있고_개인정보를_담지_않는다() throws Exception {
         Document document = documentRepository.save(
