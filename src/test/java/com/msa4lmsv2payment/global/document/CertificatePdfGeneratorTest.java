@@ -12,6 +12,23 @@ import static org.assertj.core.api.Assertions.assertThat;
 class CertificatePdfGeneratorTest {
 
     @Test
+    void 교과목과_성적의_줄바꿈은_같은_페이지에_묶는다() throws Exception {
+        var rows = new java.util.ArrayList<java.util.Map.Entry<String,String>>();
+        for (int i = 0; i < 23; i++) rows.add(java.util.Map.entry("항목", "내용"));
+        rows.add(java.util.Map.entry("2025학년도 1학기", "자료구조와 알고리즘의 이론 및 응용 프로젝트 (CS101) / 3학점 / A+ / 평점 4.5"));
+        byte[] bytes = new CertificatePdfGenerator().generate("성 적 증 명 서", rows,
+                "https://example.test/verify", LocalDateTime.of(2026,9,16,0,0));
+        try (var document = PDDocument.load(bytes)) {
+            assertThat(document.getNumberOfPages()).isEqualTo(2);
+            var extractor = new PDFTextStripper();
+            extractor.setStartPage(1); extractor.setEndPage(1);
+            assertThat(extractor.getText(document)).doesNotContain("CS101");
+            extractor.setStartPage(2); extractor.setEndPage(2);
+            assertThat(extractor.getText(document)).contains("2025학년도 1학기", "CS101", "평점 4.5");
+        }
+    }
+
+    @Test
     void 한글_텍스트와_QR을_포함한_PDF를_생성한다() throws Exception {
         CertificatePdfGenerator generator = new CertificatePdfGenerator();
 
