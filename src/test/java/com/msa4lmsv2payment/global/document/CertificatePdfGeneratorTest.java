@@ -12,6 +12,26 @@ import static org.assertj.core.api.Assertions.assertThat;
 class CertificatePdfGeneratorTest {
 
     @Test
+    void 새_서식에서도_문서확인번호와_원본_QR_링크를_유지한다() throws Exception {
+        String token = "d9cb52ca-4f29-4ac8-b618-9222a9a23a79";
+        String verifyUrl = "https://example.test/certificates/verify?token=" + token + "&qrHash=signature";
+        byte[] bytes = new CertificatePdfGenerator().generate("재 학 증 명 서",
+                List.of(java.util.Map.entry("성명", "홍길동"), java.util.Map.entry("학번", "20260001")),
+                verifyUrl, LocalDateTime.of(2026, 9, 16, 0, 0));
+        try (var document = PDDocument.load(bytes)) {
+            assertThat(new PDFTextStripper().getText(document)).contains(
+                    "미래대학교 총장", "위 사람은 본교에 재학 중임을 증명합니다.", token);
+            assertThat(document.getDocumentInformation().getTitle()).isEqualTo("재 학 증 명 서");
+            var page = new org.apache.pdfbox.rendering.PDFRenderer(document).renderImageWithDPI(0, 144);
+            // 인쇄 결과의 QR 영역을 읽어 실제 검증 주소가 그대로 유지되는지 확인한다.
+            var qr = page.getSubimage(136, page.getHeight() - 328, 172, 172);
+            var bitmap = new com.google.zxing.BinaryBitmap(new com.google.zxing.common.HybridBinarizer(
+                    new com.google.zxing.client.j2se.BufferedImageLuminanceSource(qr)));
+            assertThat(new com.google.zxing.MultiFormatReader().decode(bitmap).getText()).isEqualTo(verifyUrl);
+        }
+    }
+
+    @Test
     void 교과목과_성적의_줄바꿈은_같은_페이지에_묶는다() throws Exception {
         var rows = new java.util.ArrayList<java.util.Map.Entry<String,String>>();
         for (int i = 0; i < 23; i++) rows.add(java.util.Map.entry("항목", "내용"));
