@@ -55,7 +55,7 @@ public class DocumentController {
         return GlobalResponseDTO.success(documentService.issuePaymentReceipt(currentUser, request));
     }
 
-    @Operation(summary = "학생 재학/졸업증명서 발급", description = "재학증명서는 재학 상태, 졸업증명서는 Academic의 졸업요건 충족 여부를 확인한 뒤에만 발급한다. STUDENT 본인만 가능.")
+    @Operation(summary = "학생 재학/졸업/성적증명서 발급", description = "재학증명서는 재학 상태, 졸업증명서는 졸업요건을 확인한다. 성적증명서는 성적 조회와 동일하게 확정·강의평가 제출된 성적을 기재한다. STUDENT 본인만 가능.")
     @ApiResponse(responseCode = "201", description = "발급 성공")
     @CustomApiResponse({CustomResponseCode.INVALID_PARAMETER, CustomResponseCode.ACCESS_DENIED, CustomResponseCode.NOT_FOUND_DATA})
     @PreAuthorize("hasRole('STUDENT')")

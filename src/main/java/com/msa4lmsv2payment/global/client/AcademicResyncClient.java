@@ -67,6 +67,14 @@ public class AcademicResyncClient {
                 new ParameterizedTypeReference<>() {});
     }
 
+    public Optional<StudentGradeResponse> fetchStudentGrades(CurrentUser user) {
+        if (!"STUDENT".equals(user.role())) return Optional.empty();
+        // 필터 없이 전체 공개 성적을 조회한다. queryCredits는 이 목록에서 재수강·F를 반영한 취득학점이다.
+        return get("/api/academic/grades/me?sortBy=ACADEMIC_YEAR&direction=ASC", user.id(),
+                new ParameterizedTypeReference<InternalApiResponse<StudentGradeResponse>>() {},
+                Map.of("X-User-Id", user.id().toString(), "X-User-Role", "STUDENT"));
+    }
+
     public Optional<ProfessorCertificateEligibilityResponse> fetchProfessorCertificateEligibilityByUserId(Long userId) {
         return get("/api/academic/professors/by-user/{userId}/certificate-snapshot", userId,
                 new ParameterizedTypeReference<>() {});

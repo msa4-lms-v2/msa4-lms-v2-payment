@@ -244,4 +244,80 @@ class DocumentServiceTest {
     private CurrentUser admin() {
         return new CurrentUser(1L, "ADMIN");
     }
+
+    private CurrentUser studentWithEligibility(Boolean graduationSatisfied) {
+        var user = new CurrentUser(7L, "STUDENT");
+        when(tuitionBillService.resolveStudentId(user)).thenReturn(8L);
+        when(academicResyncClient.fetchStudentCertificateEligibility(8L, user)).thenReturn(Optional.of(
+                new com.msa4lmsv2payment.global.client.StudentCertificateEligibilityResponse(
+                        8L, "22010001", "검증학생", "컴퓨터학과", "공과대학", (byte)4, (short)2022,
+                        "ENROLLED", graduationSatisfied, 130)));
+        return user;
+    }
+
+    private com.msa4lmsv2payment.domain.document.request.AcademicCertificateRequestDTO request(DocumentType type) {
+        return new com.msa4lmsv2payment.domain.document.request.AcademicCertificateRequestDTO(type);
+    }
+
+    private void stubIssue() {
+        when(pdfGenerator.generate(any(), any(), any(), any())).thenReturn(new byte[]{1});
+        when(fileStorageService.upload(any(), any(), any(), any())).thenReturn("certificates/test.pdf");
+        when(documentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+    }
+
+    @Test void 성적증명서는_졸업요건과_무관하게_공개성적과_재수강반영_요약을_기재한다() {
+        var user = studentWithEligibility(false);
+        var oldGrade = new com.msa4lmsv2payment.global.client.StudentGradeResponse.Grade(
+                (short)2024, "FIRST", "CS101", "자료구조", (byte)3, "F", java.math.BigDecimal.ZERO, false);
+        var latest = new com.msa4lmsv2payment.global.client.StudentGradeResponse.Grade(
+                (short)2025, "SECOND", "CS101", "자료구조", (byte)3, "A+", new java.math.BigDecimal("4.5"), true);
+        when(academicResyncClient.fetchStudentGrades(user)).thenReturn(Optional.of(
+                new com.msa4lmsv2payment.global.client.StudentGradeResponse(new java.math.BigDecimal("4.50"), 3, List.of(oldGrade, latest))));
+        stubIssue();
+        assertEquals(DocumentType.GRADE, service.issueAcademicCertificate(user, request(DocumentType.GRADE)).documentType());
+        verify(documentRepository).save(argThat(doc -> doc.getStudentId().equals(8L) && doc.getProfessorId() == null));
+        verify(pdfGenerator).generate(org.mockito.ArgumentMatchers.eq("성 적 증 명 서"), argThat(rows ->
+                rows.stream().anyMatch(row -> row.getValue().equals("3학점 / 4.50 (4.5 만점)"))
+                && rows.stream().anyMatch(row -> row.getValue().contains("재수강으로 합계 제외"))
+                && rows.stream().anyMatch(row -> row.getValue().contains("자료구조 (CS101)"))), any(), any());
+    }
+
+    @Test void 공개성적이_없으면_이유를_안내하고_발급하지_않는다() {
+        var user = studentWithEligibility(null);
+        when(academicResyncClient.fetchStudentGrades(user)).thenReturn(Optional.of(
+                new com.msa4lmsv2payment.global.client.StudentGradeResponse(java.math.BigDecimal.ZERO, 0, List.of())));
+        var error = assertThrows(CertificateNotEligibleException.class,
+                () -> service.issueAcademicCertificate(user, request(DocumentType.GRADE)));
+        assertTrue(error.getMessage().contains("강의평가"));
+        verify(fileStorageService, never()).upload(any(), any(), any(), any());
+        verify(documentRepository, never()).save(any());
+    }
+
+    @Test void 학사_조회실패를_성적없음으로_취급하거나_문서를_발급하지_않는다() {
+        var user = studentWithEligibility(null);
+        when(academicResyncClient.fetchStudentGrades(user)).thenReturn(Optional.empty());
+        assertThrows(com.msa4lmsv2payment.global.error.AcademicServiceUnavailableException.class,
+                () -> service.issueAcademicCertificate(user, request(DocumentType.GRADE)));
+        verify(documentRepository, never()).save(any());
+        verify(fileStorageService, never()).upload(any(), any(), any(), any());
+    }
+
+    @Test void 졸업요건_충족은_졸업증명서로_발급하고_미충족은_저장하지_않는다() {
+        var user = studentWithEligibility(false);
+        assertThrows(CertificateNotEligibleException.class,
+                () -> service.issueAcademicCertificate(user, request(DocumentType.GRADUATION)));
+        verify(documentRepository, never()).save(any());
+        studentWithEligibility(true);
+        stubIssue();
+        assertEquals(DocumentType.GRADUATION, service.issueAcademicCertificate(user, request(DocumentType.GRADUATION)).documentType());
+        verify(pdfGenerator).generate(org.mockito.ArgumentMatchers.eq("졸 업 증 명 서"),
+                argThat(rows -> rows.stream().anyMatch(row -> row.getValue().equals("충족(취득 130학점)"))), any(), any());
+        verify(academicResyncClient, never()).fetchStudentGrades(any());
+    }
+
+    @Test void 다른_증명서_종류가_졸업증명서로_발급되지_않는다() {
+        assertThrows(CertificateNotEligibleException.class,
+                () -> service.issueAcademicCertificate(new CurrentUser(7L, "STUDENT"), request(DocumentType.CAREER)));
+        verify(tuitionBillService, never()).resolveStudentId(any());
+    }
 }

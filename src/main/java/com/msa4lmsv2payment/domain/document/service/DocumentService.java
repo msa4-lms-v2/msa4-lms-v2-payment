@@ -19,8 +19,10 @@ import com.msa4lmsv2payment.global.audit.AuditLogRecorder;
 import com.msa4lmsv2payment.global.client.AcademicResyncClient;
 import com.msa4lmsv2payment.global.client.ProfessorCertificateEligibilityResponse;
 import com.msa4lmsv2payment.global.client.StudentCertificateEligibilityResponse;
+import com.msa4lmsv2payment.global.client.StudentGradeResponse;
 import com.msa4lmsv2payment.global.document.CertificatePdfGenerator;
 import com.msa4lmsv2payment.global.error.AcademicResourceNotFoundException;
+import com.msa4lmsv2payment.global.error.AcademicServiceUnavailableException;
 import com.msa4lmsv2payment.global.error.CertificateNotEligibleException;
 import com.msa4lmsv2payment.global.error.DocumentNotFoundException;
 import com.msa4lmsv2payment.global.error.DocumentSignatureMismatchException;
@@ -109,25 +111,41 @@ public class DocumentService {
         return issue(tuitionBill.getStudentId(), null, DocumentType.PAYMENT_CERTIFICATE, "납 부 확 인 서", rows);
     }
 
-    // 학생 재학/졸업증명서 - Academic의 학적·졸업요건 실시간 조회 결과로 자격을 확인한 뒤에만 발급한다.
+    // 학적·졸업요건·공개 성적은 Academic에서 발급 시점에 조회한다.
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public DocumentResponseDTO issueAcademicCertificate(CurrentUser currentUser, AcademicCertificateRequestDTO request) {
+        if (request == null || request.documentType() == null || !request.isStudentDocumentType()) {
+            throw new CertificateNotEligibleException("지원하지 않는 학생 증명서 종류입니다.");
+        }
         Long studentId = tuitionBillService.resolveStudentId(currentUser);
         StudentCertificateEligibilityResponse eligibility = academicResyncClient
                 .fetchStudentCertificateEligibility(studentId, currentUser)
                 .orElseThrow(() -> new AcademicResourceNotFoundException("학생 학적 정보를 확인할 수 없습니다."));
 
         String title;
+        StudentGradeResponse transcript = null;
         if (request.documentType() == DocumentType.ENROLLMENT) {
             if (!"ENROLLED".equals(eligibility.academicStatus())) {
                 throw new CertificateNotEligibleException("재학 중인 학생만 재학증명서를 발급할 수 있습니다.");
             }
             title = "재 학 증 명 서";
-        } else {
+        } else if (request.documentType() == DocumentType.GRADUATION) {
             if (!Boolean.TRUE.equals(eligibility.graduationSatisfied())) {
                 throw new CertificateNotEligibleException("졸업요건을 충족하지 못해 졸업증명서를 발급할 수 없습니다.");
             }
             title = "졸 업 증 명 서";
+        } else {
+            transcript = academicResyncClient.fetchStudentGrades(currentUser)
+                    .orElseThrow(() -> new AcademicServiceUnavailableException(
+                            "성적 정보를 조회하지 못했습니다. 잠시 후 다시 시도해 주세요."));
+            if (transcript.grades() == null || transcript.totalGpa() == null) {
+                throw new AcademicServiceUnavailableException("성적 정보를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.");
+            }
+            if (transcript.grades().isEmpty()) {
+                throw new CertificateNotEligibleException(
+                        "발급 가능한 성적이 없습니다. 성적 확정 및 강의평가 제출 여부를 확인해 주세요.");
+            }
+            title = "성 적 증 명 서";
         }
 
         List<Map.Entry<String, String>> rows = new ArrayList<>(List.of(
@@ -141,6 +159,17 @@ public class DocumentService {
         ));
         if (request.documentType() == DocumentType.GRADUATION) {
             rows.add(entry("졸업요건", "충족(취득 " + eligibility.earnedTotalCredits() + "학점)"));
+        }
+        if (transcript != null) {
+            rows.add(entry("증명 범위", "확정 및 강의평가 제출 완료 성적"));
+            rows.add(entry("취득학점 / 평점평균", transcript.queryCredits() + "학점 / " + transcript.totalGpa().toPlainString() + " (4.5 만점)"));
+            rows.add(entry("성적 반영 기준", "재수강은 최종 성적 반영, F는 취득학점 제외"));
+            for (var grade : transcript.grades()) {
+                rows.add(entry(grade.academicYear() + "학년도 " + ("FIRST".equals(grade.term()) ? "1" : "2") + "학기",
+                        grade.courseName() + " (" + grade.courseCode() + ")"));
+                rows.add(entry("학점 / 등급 / 평점", grade.credits() + " / " + grade.letterGrade() + " / " + grade.gradePoint()
+                        + (grade.reflectedInGpa() ? "" : " (재수강으로 합계 제외)")));
+            }
         }
 
         return issue(studentId, null, request.documentType(), title, rows);
