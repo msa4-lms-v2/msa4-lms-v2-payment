@@ -26,7 +26,7 @@ class AdmissionPaymentWorkerTest {
         when(bills.findById(100L)).thenReturn(Optional.of(bill));
         when(academic.get(7L)).thenReturn(candidate("PENDING",null));
     }
-    AdmissionAcademicClient.Candidate candidate(String status,Long student) {return new AdmissionAcademicClient.Candidate(7L,"학생",(short)2027,status,100L,false,student,3L);}
+    AdmissionAcademicClient.Candidate candidate(String status,Long student) {return new AdmissionAcademicClient.Candidate(7L,"학생",(short)2027,status,100L,false,student,3L,1L);}
     void paidAccount() {
         bill.changeStatus(TuitionBillStatus.PAID);
         var a=new VirtualAccount(100L,"ADMISSION-100","secret","account","88",LocalDateTime.now().plusDays(7),VirtualAccountStatus.DEPOSITED);

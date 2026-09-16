@@ -75,6 +75,12 @@ public class TuitionBill {
 
     private BigDecimal billingAmount;
 
+    private Long tuitionRateId;
+
+    public void assignTuitionRate(Long rateId) {
+        this.tuitionRateId = rateId;
+    }
+
     private LocalDate dueDate;
 
     @Enumerated(EnumType.STRING)

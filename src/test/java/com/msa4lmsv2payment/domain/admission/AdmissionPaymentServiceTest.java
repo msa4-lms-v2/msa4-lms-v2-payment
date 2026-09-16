@@ -19,6 +19,7 @@ import com.msa4lmsv2payment.domain.virtualaccount.entity.VirtualAccountStatus;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
 class AdmissionPaymentServiceTest {
@@ -28,18 +29,19 @@ class AdmissionPaymentServiceTest {
     private final VirtualAccountRepository accounts = mock(VirtualAccountRepository.class);
     private final AdmissionPaymentRecorder recorder = mock(AdmissionPaymentRecorder.class);
     private final TossPaymentsClient toss = mock(TossPaymentsClient.class);
-    private final AdmissionPaymentService service = new AdmissionPaymentService(academic, catalog, bills, accounts, recorder, toss);
+    private final com.msa4lmsv2payment.domain.tuitionrate.service.DepartmentTuitionRateService tuitionRates = mock(com.msa4lmsv2payment.domain.tuitionrate.service.DepartmentTuitionRateService.class);
+    private final AdmissionPaymentService service = new AdmissionPaymentService(academic, catalog, bills, accounts, recorder, toss, tuitionRates);
     private final AdmissionBillRequest request = new AdmissionBillRequest(1L, new BigDecimal("10000"), LocalDate.now().plusDays(7), "88");
 
     private void pending() {
-        var candidate = new AdmissionAcademicClient.Candidate(7L, "학생", (short)2027, "PENDING", 100L, false, null, 3L);
+        var candidate = new AdmissionAcademicClient.Candidate(7L, "학생", (short)2027, "PENDING", 100L, false, null, 3L, 1L);
         var bill = new TuitionBill(null, 1L, request.billingAmount(), request.dueDate(), TuitionBillStatus.UNPAID, 1L);
         bill.admission(7L, "학생", "88");
         ReflectionTestUtils.setField(bill, "id", 100L);
         when(academic.get(7L)).thenReturn(candidate);
         when(academic.post(7L, "bill", 100L)).thenReturn(candidate);
         when(catalog.findSemester(1L)).thenReturn(new AcademicSemesterResponse(1L, LocalDate.of(2027,3,1), LocalDate.of(2027,6,30)));
-        when(recorder.reserve(7L, "학생", 1L, request)).thenReturn(bill);
+        when(recorder.reserve(7L, "학생", 1L, 1L, request)).thenReturn(bill);
     }
 
     @Test
@@ -67,14 +69,66 @@ class AdmissionPaymentServiceTest {
 
     @Test
     void cancelledCandidateNeverIssuesVirtualAccount() {
-        when(academic.get(7L)).thenReturn(new AdmissionAcademicClient.Candidate(7L, "학생", (short)2027, "CANCELLED", null, false, null, 3L));
+        when(academic.get(7L)).thenReturn(new AdmissionAcademicClient.Candidate(7L, "학생", (short)2027, "CANCELLED", null, false, null, 3L, 1L));
         assertThatThrownBy(() -> service.issue(7L, request, new CurrentUser(1L, "ADMIN")))
                 .isInstanceOf(AdmissionPaymentConflictException.class);
         verifyNoInteractions(toss, recorder);
     }
 
+    @Test
+    void quoteUsesSavedCandidateDepartmentAndSelectedSemester() {
+        pending();
+        when(tuitionRates.getRequired(1L, 1L)).thenReturn(
+                new com.msa4lmsv2payment.domain.tuitionrate.entity.DepartmentTuitionRate(
+                        1L, 1L, new BigDecimal("2998000"), "https://www.snu.ac.kr"));
+        var quote = service.quote(7L, 1L, new CurrentUser(1L, "ADMIN"));
+        assertThat(quote.departmentId()).isEqualTo(1L);
+        assertThat(quote.billingAmount()).isEqualByComparingTo("2998000");
+        verifyNoInteractions(toss);
+    }
+
+    @Test
+    void quoteKeepsExistingBillAmountWithoutReadingCurrentRateAmount() {
+        pending();
+        var existing = new TuitionBill(null, 1L, new BigDecimal("3000000"), request.dueDate(), TuitionBillStatus.UNPAID, 1L);
+        when(bills.findByAdmissionCandidateId(7L)).thenReturn(Optional.of(existing));
+        var quote = service.quote(7L, 1L, new CurrentUser(1L, "ADMIN"));
+        assertThat(quote.billingAmount()).isEqualByComparingTo("3000000");
+        verify(tuitionRates, never()).getRequired(any(), any());
+    }
+
+    @Test
+    void nonAdminCannotQuoteOrIssue() {
+        var student = new CurrentUser(8L, "STUDENT");
+        assertThatThrownBy(() -> service.quote(7L, 1L, student))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+        assertThatThrownBy(() -> service.issue(7L, request, student))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+        verifyNoInteractions(academic, catalog, bills, recorder, tuitionRates, toss);
+    }
+
+    @Test
+    void departmentChangedDuringBindingPreventsPgIssuance() {
+        pending();
+        when(academic.post(7L, "bill", 100L)).thenReturn(new AdmissionAcademicClient.Candidate(
+                7L, "학생", (short)2027, "PENDING", 100L, false, null, 3L, 5L));
+        assertThatThrownBy(() -> service.issue(7L, request, new CurrentUser(1L, "ADMIN")))
+                .isInstanceOf(AdmissionPaymentConflictException.class);
+        verifyNoInteractions(toss);
+    }
+
+    @Test
+    void differentAdmissionYearCannotQuote() {
+        pending();
+        when(catalog.findSemester(1L)).thenReturn(new AcademicSemesterResponse(
+                1L, LocalDate.of(2026, 3, 1), LocalDate.of(2026, 6, 30)));
+        assertThatThrownBy(() -> service.quote(7L, 1L, new CurrentUser(1L, "ADMIN")))
+                .isInstanceOf(AdmissionPaymentConflictException.class);
+        verifyNoInteractions(tuitionRates);
+    }
+
     private TuitionBill expired() {
-        when(academic.get(7L)).thenReturn(new AdmissionAcademicClient.Candidate(7L, "학생", (short)2027, "PENDING", 100L, false, null, 3L));
+        when(academic.get(7L)).thenReturn(new AdmissionAcademicClient.Candidate(7L, "학생", (short)2027, "PENDING", 100L, false, null, 3L, 1L));
         var bill = new TuitionBill(null, 1L, request.billingAmount(), LocalDate.now().minusDays(1), TuitionBillStatus.UNPAID, 1L);
         bill.admission(7L, "학생", "88"); ReflectionTestUtils.setField(bill, "id", 100L);
         var old = new VirtualAccount(100L, "ADMISSION-100", "secret", "account", "88", LocalDateTime.now().minusDays(1), VirtualAccountStatus.EXPIRED);

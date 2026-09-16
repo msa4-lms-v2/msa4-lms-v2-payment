@@ -10,10 +10,12 @@ import com.msa4lmsv2payment.domain.virtualaccount.response.VirtualAccountRespons
 import com.msa4lmsv2payment.global.client.AcademicClient;
 import com.msa4lmsv2payment.global.client.TossPaymentsClient;
 import com.msa4lmsv2payment.global.security.CurrentUser;
+import com.msa4lmsv2payment.domain.tuitionrate.service.DepartmentTuitionRateService;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Set;
+import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -26,6 +28,40 @@ public class AdmissionPaymentService {
     private final VirtualAccountRepository accounts;
     private final AdmissionPaymentRecorder recorder;
     private final TossPaymentsClient toss;
+    private final DepartmentTuitionRateService tuitionRates;
+
+    public record Quote(Long departmentId, Long semesterId, BigDecimal billingAmount) {}
+
+    private void requireAdmin(CurrentUser user) {
+        if (user == null || !user.isAdmin()) {
+            throw new org.springframework.security.access.AccessDeniedException("관리자만 입학 등록금을 처리할 수 있습니다.");
+        }
+    }
+
+    public Quote quote(Long candidateId, Long semesterId, CurrentUser admin) {
+        requireAdmin(admin);
+        var candidate = academic.get(candidateId);
+        requireEligible(candidate);
+        validateSemester(candidate, semesterId);
+        var existing = bills.findByAdmissionCandidateId(candidateId);
+        if (existing.isPresent()) {
+            var bill = existing.get();
+            if (!bill.getSemesterId().equals(semesterId)) {
+                throw new AdmissionPaymentConflictException("이미 발급한 고지의 학기를 선택해 주세요.");
+            }
+            tuitionRates.validateDepartment(bill.getTuitionRateId(), candidate.departmentId());
+            return new Quote(candidate.departmentId(), semesterId, bill.getBillingAmount());
+        }
+        var rate = tuitionRates.getRequired(candidate.departmentId(), semesterId);
+        return new Quote(candidate.departmentId(), semesterId, rate.getAmount());
+    }
+
+    private void validateSemester(AdmissionAcademicClient.Candidate candidate, Long semesterId) {
+        var semester = catalog.findSemester(semesterId);
+        if (semester.startDate() == null || semester.startDate().getYear() != candidate.admissionYear()) {
+            throw new AdmissionPaymentConflictException("입학 연도와 고지 학기가 일치해야 합니다.");
+        }
+    }
 
     public record Detail(TuitionBillResponseDTO bill, VirtualAccountResponseDTO virtualAccount,
                          String syncError, boolean syncComplete, String bankCode,
@@ -53,16 +89,18 @@ public class AdmissionPaymentService {
     }
 
     public Detail issue(Long candidateId, AdmissionBillRequest request, CurrentUser admin) {
+        requireAdmin(admin);
         var candidate = academic.get(candidateId);
         requireEligible(candidate);
         var semester = catalog.findSemester(request.semesterId());
         if (semester.startDate() == null || semester.startDate().getYear() != candidate.admissionYear()) {
             throw new AdmissionPaymentConflictException("입학 연도와 고지 학기가 일치해야 합니다.");
         }
-        var bill = recorder.reserve(candidateId, candidate.name(), admin.id(), request);
+        var bill = recorder.reserve(candidateId, candidate.name(), admin.id(), candidate.departmentId(), request);
         var bound = academic.post(candidateId, "bill", bill.getId());
         if (!bound.name().equals(bill.getAdmissionCustomerName()) || bound.admissionYear() != semester.startDate().getYear()
-                || !"PENDING".equals(bound.status()) || !bill.getId().equals(bound.tuitionBillId())) {
+                || !"PENDING".equals(bound.status()) || !bill.getId().equals(bound.tuitionBillId())
+                || !Objects.equals(candidate.departmentId(), bound.departmentId())) {
             throw new AdmissionPaymentConflictException("고지 생성 중 입학 정보가 변경됐습니다. 관리자 확인이 필요합니다.");
         }
         issueCurrent(bill, admin.id());
@@ -70,6 +108,7 @@ public class AdmissionPaymentService {
     }
 
     public Detail reissue(Long candidateId, AdmissionReissueRequest request, CurrentUser admin) {
+        requireAdmin(admin);
         requireEligible(academic.get(candidateId));
         var bill = bills.findByAdmissionCandidateId(candidateId)
                 .orElseThrow(() -> new AdmissionPaymentConflictException("기존 고지가 없습니다."));
