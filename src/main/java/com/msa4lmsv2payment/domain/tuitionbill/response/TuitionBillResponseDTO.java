@@ -9,11 +9,13 @@ import java.time.LocalDate;
 
 public record TuitionBillResponseDTO(
         @Schema(description = "등록금 고지 ID") Long id,
-        @Schema(description = "Academic.students.id (학번)", example = "20260001") Long studentId,
+        @Schema(description = "학생 내부 ID (학번과 별도)") Long studentId,
         @Schema(description = "Academic.semesters.id") Long semesterId,
         @Schema(description = "고지 금액") BigDecimal billingAmount,
         @Schema(description = "납부 기한") LocalDate dueDate,
-        @Schema(description = "납부 상태") TuitionBillStatus status
+        @Schema(description = "납부 상태") TuitionBillStatus status,
+        @Schema(description = "입학 예정자 ID", nullable = true) Long admissionCandidateId,
+        @Schema(description = "입학 고지 대상자 이름", nullable = true) String admissionCustomerName
 ) {
     public static TuitionBillResponseDTO from(TuitionBill tuitionBill) {
         return new TuitionBillResponseDTO(
@@ -22,7 +24,9 @@ public record TuitionBillResponseDTO(
                 tuitionBill.getSemesterId(),
                 tuitionBill.getBillingAmount(),
                 tuitionBill.getDueDate(),
-                tuitionBill.getStatus()
+                tuitionBill.getStatus(),
+                tuitionBill.getAdmissionCandidateId(),
+                tuitionBill.getAdmissionCustomerName()
         );
     }
 }
