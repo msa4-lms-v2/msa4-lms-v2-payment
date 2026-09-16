@@ -166,8 +166,8 @@ public class DocumentService {
             rows.add(entry("성적 반영 기준", "재수강은 최종 성적 반영, F는 취득학점 제외"));
             for (var grade : transcript.grades()) {
                 rows.add(entry(grade.academicYear() + "학년도 " + ("FIRST".equals(grade.term()) ? "1" : "2") + "학기",
-                        grade.courseName() + " (" + grade.courseCode() + ")"));
-                rows.add(entry("학점 / 등급 / 평점", grade.credits() + " / " + grade.letterGrade() + " / " + grade.gradePoint()
+                        grade.courseName() + " (" + grade.courseCode() + ") / "
+                        + grade.credits() + "학점 / " + grade.letterGrade() + " / 평점 " + grade.gradePoint()
                         + (grade.reflectedInGpa() ? "" : " (재수강으로 합계 제외)")));
             }
         }

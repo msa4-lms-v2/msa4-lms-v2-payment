@@ -49,14 +49,27 @@ public class CertificatePdfGenerator {
     public byte[] generate(String title, List<Map.Entry<String, String>> rows, String verifyUrl, LocalDateTime issuedAt) {
         try (PDDocument document = new PDDocument()) {
             PDType0Font font = PDType0Font.load(document, new ByteArrayInputStream(fontBytes), true);
-            var lines = new java.util.ArrayList<Map.Entry<String, String>>();
+            var pages = new java.util.ArrayList<List<Map.Entry<String, String>>>();
+            List<Map.Entry<String, String>> lines = new java.util.ArrayList<>();
+            pages.add(lines);
             for (var row : rows) {
                 var keys = wrap(font, row.getKey(), 145f);
                 var values = wrap(font, row.getValue(), 310f);
-                for (int i = 0; i < Math.max(keys.size(), values.size()); i++)
+                int rowLines = Math.max(keys.size(), values.size());
+                // 한 항목의 줄바꿈 내용은 같은 페이지에 유지한다. 한 페이지보다 긴 항목만 나눈다.
+                if (!lines.isEmpty() && lines.size() + rowLines > 24) {
+                    lines = new java.util.ArrayList<>();
+                    pages.add(lines);
+                }
+                for (int i = 0; i < rowLines; i++) {
+                    if (lines.size() == 24) {
+                        lines = new java.util.ArrayList<>();
+                        pages.add(lines);
+                    }
                     lines.add(Map.entry(i < keys.size() ? keys.get(i) : "", i < values.size() ? values.get(i) : ""));
+                }
             }
-            int pageCount = Math.max(1, (lines.size() + 23) / 24);
+            int pageCount = pages.size();
             PDImageXObject qrImage = LosslessFactory.createFromImage(document, renderQr(verifyUrl));
             for (int pageIndex = 0; pageIndex < pageCount; pageIndex++) {
                 PDPage page = new PDPage(PDRectangle.A4);
@@ -64,9 +77,9 @@ public class CertificatePdfGenerator {
                 try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
                     text(stream, font, 22, MARGIN_X, TITLE_Y, title);
                     float y = ROW_START_Y;
-                    for (int i = pageIndex * 24; i < Math.min(lines.size(), (pageIndex + 1) * 24); i++) {
-                        text(stream, font, 12, MARGIN_X, y, lines.get(i).getKey());
-                        text(stream, font, 12, MARGIN_X + 160, y, lines.get(i).getValue());
+                    for (var line : pages.get(pageIndex)) {
+                        text(stream, font, 12, MARGIN_X, y, line.getKey());
+                        text(stream, font, 12, MARGIN_X + 160, y, line.getValue());
                         y -= 18;
                     }
                     text(stream, font, 11, MARGIN_X, 195, "발급일: " + issuedAt.format(ISSUED_AT_FORMAT));
