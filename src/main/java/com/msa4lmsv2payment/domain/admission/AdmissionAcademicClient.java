@@ -8,7 +8,7 @@ import org.springframework.core.ParameterizedTypeReference;
 import java.util.Map;
 @Component
 public class AdmissionAcademicClient {
-    public record Candidate(Long id,String name,short admissionYear,String status,Long tuitionBillId,boolean tuitionPaid,Long studentId,Long advisorProfessorId) {}
+    public record Candidate(Long id,String name,short admissionYear,String status,Long tuitionBillId,boolean tuitionPaid,Long studentId,Long advisorProfessorId,Long departmentId) {}
     private final RestClient client;
     public AdmissionAcademicClient(@Value("${ADMISSION_ACADEMIC_BASE_URL:${ACADEMIC_INTERNAL_BASE_URL:http://localhost:8082}}") String url) {
         var factory=new SimpleClientHttpRequestFactory();factory.setConnectTimeout(2000);factory.setReadTimeout(5000);
