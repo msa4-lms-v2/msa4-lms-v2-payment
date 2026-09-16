@@ -7,6 +7,7 @@ import com.msa4lmsv2payment.domain.virtualaccount.repository.VirtualAccountRepos
 import com.msa4lmsv2payment.domain.virtualaccount.entity.*;
 import com.msa4lmsv2payment.domain.virtualaccount.service.VirtualAccountRecorderService;
 import com.msa4lmsv2payment.global.client.TossVirtualAccountIssueResponse;
+import com.msa4lmsv2payment.domain.tuitionrate.service.DepartmentTuitionRateService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,16 +22,20 @@ public class AdmissionPaymentRecorder {
     private final PaymentRepository payments;
     private final com.msa4lmsv2payment.domain.refund.service.RefundRecorderService refundRecorder;
     private final com.msa4lmsv2payment.domain.virtualaccount.repository.VirtualAccountDepositRepository deposits;
-    public TuitionBill reserve(Long candidateId,String name,Long adminId,AdmissionBillRequest request) {
+    private final DepartmentTuitionRateService tuitionRates;
+    public TuitionBill reserve(Long candidateId,String name,Long adminId,Long departmentId,AdmissionBillRequest request) {
         var found=bills.findByAdmissionCandidateId(candidateId);
         if(found.isPresent()) {
             var b=found.get();
-            if(!b.getSemesterId().equals(request.semesterId()) || b.getBillingAmount().compareTo(request.billingAmount())!=0 || !b.getDueDate().equals(request.dueDate()) || !b.getAdmissionBankCode().equals(request.bankCode()))
-                throw new AdmissionPaymentConflictException("이미 발급 요청된 고지의 학기·금액·기한·은행과 일치해야 합니다.");
+            if(!b.getSemesterId().equals(request.semesterId()) || !b.getDueDate().equals(request.dueDate()) || !b.getAdmissionBankCode().equals(request.bankCode()))
+                throw new AdmissionPaymentConflictException("이미 발급 요청된 고지의 학기·기한·은행과 일치해야 합니다.");
+            tuitionRates.validateDepartment(b.getTuitionRateId(), departmentId);
             return b;
         }
-        var b=new TuitionBill(null,request.semesterId(),request.billingAmount(),request.dueDate(),TuitionBillStatus.UNPAID,adminId);
-        b.admission(candidateId,name,request.bankCode());return recorder.saveWithAudit(adminId,b,List.of(new TuitionBillItemSpec("입학 등록금",request.billingAmount())));
+        var rate = tuitionRates.getRequired(departmentId, request.semesterId());
+        var b=new TuitionBill(null,request.semesterId(),rate.getAmount(),request.dueDate(),TuitionBillStatus.UNPAID,adminId);
+        b.assignTuitionRate(rate.getId());
+        b.admission(candidateId,name,request.bankCode());return recorder.saveWithAudit(adminId,b,List.of(new TuitionBillItemSpec("입학 등록금",rate.getAmount())));
     }
     public VirtualAccount issued(Long billId,String orderId,TossVirtualAccountIssueResponse r,Long adminId) {
         var b=bills.findByIdForUpdate(billId).orElseThrow();
