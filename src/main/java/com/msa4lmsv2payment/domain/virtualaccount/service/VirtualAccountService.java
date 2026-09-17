@@ -86,6 +86,19 @@ public class VirtualAccountService {
     }
 
     /**
+     * 등록금 납부 화면이 고지 1건의 최신 가상계좌를 조회할 때 이 메서드를 거친다.
+     * 발급 이력이 없으면(카드 결제만 쓰는 고지 등) null을 반환한다 - 화면은 이를 "가상계좌 미발급"으로 취급한다.
+     * getOwnedTuitionBillOrThrow가 STUDENT 호출 시 Academic을 부를 수 있어 트랜잭션 밖에서 실행한다.
+     */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public VirtualAccountResponseDTO findLatestByTuitionBillId(CurrentUser currentUser, Long tuitionBillId) {
+        tuitionBillService.getOwnedTuitionBillOrThrow(currentUser, tuitionBillId);
+        return virtualAccountRepository.findFirstByTuitionBillIdOrderByIdDesc(tuitionBillId)
+                .map(VirtualAccountResponseDTO::from)
+                .orElse(null);
+    }
+
+    /**
      * 환불 실행(RefundService)이 refund.virtualAccountId로 특정 가상계좌를 직접 찾아야 할 때 이 공개 메서드를 거친다.
      * 분할납부 회차별 가상계좌(4주차)가 생기면서 고지 1건에 계좌가 여러 개일 수 있어 findByTuitionBillId만으로는 부족하다.
      */
