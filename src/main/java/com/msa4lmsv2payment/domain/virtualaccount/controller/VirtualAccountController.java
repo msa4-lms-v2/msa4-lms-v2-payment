@@ -18,9 +18,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -43,6 +45,18 @@ public class VirtualAccountController {
             @RequestBody @Valid VirtualAccountIssueRequestDTO request
     ) {
         return GlobalResponseDTO.success(virtualAccountService.issueVirtualAccount(currentUser, request));
+    }
+
+    @Operation(summary = "가상계좌 조회", description = "등록금 고지 1건에 발급된 최신 가상계좌를 조회한다. 발급 이력이 없으면 data: null을 반환한다. STUDENT 본인 / ADMIN 관리 범위.")
+    @ApiResponse(responseCode = "200", description = "조회 성공(미발급 시 data: null)")
+    @CustomApiResponse({CustomResponseCode.ACCESS_DENIED})
+    @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
+    @GetMapping("/api/payment/virtual-accounts")
+    public GlobalResponseDTO<VirtualAccountResponseDTO> getVirtualAccount(
+            @AuthenticationPrincipal CurrentUser currentUser,
+            @RequestParam Long tuitionBillId
+    ) {
+        return GlobalResponseDTO.success(virtualAccountService.findLatestByTuitionBillId(currentUser, tuitionBillId));
     }
 
     @Operation(summary = "가상계좌 입금 Webhook", description = "토스페이먼츠가 가상계좌 입금 발생 시 호출한다. 로그인 사용자 없는 시스템 요청 - secret으로 인증한다.")
